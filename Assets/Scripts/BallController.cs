@@ -58,7 +58,7 @@ public class BallController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.L)) side = 0;
         if (Input.GetKeyDown(KeyCode.R)) side = 1;
 
-        if (Input.GetMouseButtonDown(0))
+        if (Input.GetKeyDown(KeyCode.P))
         {
             TossParam param;
 

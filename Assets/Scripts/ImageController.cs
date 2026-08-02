@@ -3,7 +3,7 @@ using UnityEngine;
 public class ImageController : MonoBehaviour
 {
     // =========================================================
-    // ‰æ‘œƒVƒtƒg
+    // ç”»åƒã‚·ãƒ•ãƒˆ
     // =========================================================
 
     [Header("Shift Materials")]
@@ -16,17 +16,17 @@ public class ImageController : MonoBehaviour
 
     [Header("Image Shift")]
 
-    [Tooltip("³‚Ì’l‚Å¶‰æ‘œ‚Æ‰E‰æ‘œ‚ğ‹t•ûŒü‚ÉƒVƒtƒg‚µ‚Ü‚·")]
-    public float shiftPixels = 0.0f;
+    [Tooltip("æ­£ã®å€¤ã§å·¦ç”»åƒã¨å³ç”»åƒã‚’é€†æ–¹å‘ã«ã‚·ãƒ•ãƒˆã—ã¾ã™")]
+    public int shiftPixels = 0;
 
 
     // =========================================================
-    // ƒXƒeƒŒƒIƒJƒƒ‰
+    // ã‚¹ãƒ†ãƒ¬ã‚ªã‚«ãƒ¡ãƒ©
     // =========================================================
 
     [Header("Stereo Camera Objects")]
 
-    [Tooltip("¶‰EƒJƒƒ‰‚ğq‚É‚ÂeƒIƒuƒWƒFƒNƒg")]
+    [Tooltip("å·¦å³ã‚«ãƒ¡ãƒ©ã‚’å­ã«æŒã¤è¦ªã‚ªãƒ–ã‚¸ã‚§ã‚¯ãƒˆ")]
     [SerializeField]
     private Transform stereoCameraRoot;
 
@@ -38,49 +38,42 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // Šîü’·
+    // åŸºç·šé•·
     // =========================================================
 
-    [Header("Baseline")]
+    [Header("Baseline[mm]")]
 
-    [Tooltip("Šîü’·B—á‚¦‚Î100‚È‚ç¶‰E‚ğ‚»‚ê‚¼‚ê50‚¸‚Â—£‚µ‚Ü‚·")]
     [Min(0.0f)]
     public float baseline = 100.0f;
 
-    [Tooltip(
-        "Šîü’·‚ğUnityÀ•W‚Ö•ÏŠ·‚·‚é”{—¦B" +
-        "1 Unity Unit = 1 m‚È‚ç0.001A" +
-        "1 Unity Unit = 1 mm‚È‚ç1‚ğw’è‚µ‚Ü‚·"
-    )]
-    public float baselineUnitScale = 0.001f;
 
 
     // =========================================================
-    // Å“_‹——£
+    // ç„¦ç‚¹è·é›¢
     // =========================================================
 
     [Header("Focal Length")]
 
-    [Tooltip("¶‰EƒJƒƒ‰‚Éİ’è‚·‚éÅ“_‹——£mmmn")]
+    [Tooltip("å·¦å³ã‚«ãƒ¡ãƒ©ã«è¨­å®šã™ã‚‹ç„¦ç‚¹è·é›¢ï¼»mmï¼½")]
     [Min(0.1f)]
     public float focalLength = 90.0f;
 
 
     // =========================================================
-    // ƒXƒeƒŒƒIƒJƒƒ‰e‚ÌˆÊ’u‚Æ‰ñ“]
+    // ã‚¹ãƒ†ãƒ¬ã‚ªã‚«ãƒ¡ãƒ©è¦ªã®ä½ç½®ã¨å›è»¢
     // =========================================================
 
     [Header("Stereo Camera Root Transform")]
 
-    [Tooltip("ƒXƒeƒŒƒIƒJƒƒ‰eƒIƒuƒWƒFƒNƒg‚Ìƒ[ƒJƒ‹À•W")]
+    [Tooltip("ã‚¹ãƒ†ãƒ¬ã‚ªã‚«ãƒ¡ãƒ©è¦ªã‚ªãƒ–ã‚¸ã‚§ã‚¯ãƒˆã®ãƒ­ãƒ¼ã‚«ãƒ«åº§æ¨™")]
     public Vector3 stereoCameraPosition = Vector3.zero;
 
-    [Tooltip("ƒXƒeƒŒƒIƒJƒƒ‰eƒIƒuƒWƒFƒNƒg‚ÌX²‰ñ“]mdegn")]
+    [Tooltip("ã‚¹ãƒ†ãƒ¬ã‚ªã‚«ãƒ¡ãƒ©è¦ªã‚ªãƒ–ã‚¸ã‚§ã‚¯ãƒˆã®Xè»¸å›è»¢ï¼»degï¼½")]
     public float stereoCameraRotationX = 0.0f;
 
 
     // =========================================================
-    // ShaderƒvƒƒpƒeƒB
+    // Shaderãƒ—ãƒ­ãƒ‘ãƒ†ã‚£
     // =========================================================
 
     private static readonly int ShiftPixelsProperty =
@@ -88,13 +81,13 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // UnityƒCƒxƒ“ƒg
+    // Unityã‚¤ãƒ™ãƒ³ãƒˆ
     // =========================================================
 
     private void Reset()
     {
-        // ‚±‚ÌƒXƒNƒŠƒvƒg‚ğStereo Camerae‚É•t‚¯‚½ê‡‚ÍA
-        // ©•ª©g‚ğeƒIƒuƒWƒFƒNƒg‚Æ‚µ‚Ä“o˜^
+        // ã“ã®ã‚¹ã‚¯ãƒªãƒ—ãƒˆã‚’Stereo Cameraè¦ªã«ä»˜ã‘ãŸå ´åˆã¯ã€
+        // è‡ªåˆ†è‡ªèº«ã‚’è¦ªã‚ªãƒ–ã‚¸ã‚§ã‚¯ãƒˆã¨ã—ã¦ç™»éŒ²
         stereoCameraRoot = transform;
 
         stereoCameraPosition = transform.localPosition;
@@ -113,7 +106,7 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // ‰æ‘œƒVƒtƒg
+    // ç”»åƒã‚·ãƒ•ãƒˆ
     // =========================================================
 
     private void ApplyImageShift()
@@ -137,7 +130,7 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // Šîü’·
+    // åŸºç·šé•·
     // =========================================================
 
     private void ApplyBaseline()
@@ -148,19 +141,19 @@ public class ImageController : MonoBehaviour
         }
 
         /*
-         * —áF
+         * ä¾‹ï¼š
          * baseline = 100 mm
          * baselineUnitScale = 0.001
          *
-         * ¶ƒJƒƒ‰X = -0.05 Unity Unit
-         * ‰EƒJƒƒ‰X = +0.05 Unity Unit
+         * å·¦ã‚«ãƒ¡ãƒ©X = -0.05 Unity Unit
+         * å³ã‚«ãƒ¡ãƒ©X = +0.05 Unity Unit
          *
-         * mm•\‹L‚Å‚Í¶-50 mmA‰E+50 mm
+         * mmè¡¨è¨˜ã§ã¯å·¦-50 mmã€å³+50 mm
          */
         float halfBaseline =
-            baseline * 0.5f * baselineUnitScale;
+            baseline * 0.5f * 0.001f;
 
-        // ¶ƒJƒƒ‰
+        // å·¦ã‚«ãƒ¡ãƒ©
         Vector3 leftPosition =
             leftCamera.transform.localPosition;
 
@@ -169,7 +162,7 @@ public class ImageController : MonoBehaviour
         leftCamera.transform.localPosition =
             leftPosition;
 
-        // ‰EƒJƒƒ‰
+        // å³ã‚«ãƒ¡ãƒ©
         Vector3 rightPosition =
             rightCamera.transform.localPosition;
 
@@ -181,7 +174,7 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // Å“_‹——£
+    // ç„¦ç‚¹è·é›¢
     // =========================================================
 
     private void ApplyFocalLength()
@@ -201,7 +194,7 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // eƒIƒuƒWƒFƒNƒg‚ÌˆÊ’uE‰ñ“]
+    // è¦ªã‚ªãƒ–ã‚¸ã‚§ã‚¯ãƒˆã®ä½ç½®ãƒ»å›è»¢
     // =========================================================
 
     private void ApplyStereoCameraTransform()
@@ -211,11 +204,11 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-        // eƒIƒuƒWƒFƒNƒg‘S‘Ì‚ÌXYZÀ•W
+        // è¦ªã‚ªãƒ–ã‚¸ã‚§ã‚¯ãƒˆå…¨ä½“ã®XYZåº§æ¨™
         stereoCameraRoot.localPosition =
             stereoCameraPosition;
 
-        // Y²AZ²‰ñ“]‚ÍŒ»İ’l‚ğˆÛ‚µAX²‚¾‚¯•ÏX
+        // Yè»¸ã€Zè»¸å›è»¢ã¯ç¾åœ¨å€¤ã‚’ç¶­æŒã—ã€Xè»¸ã ã‘å¤‰æ›´
         Vector3 currentEulerAngles =
             stereoCameraRoot.localEulerAngles;
 
@@ -228,7 +221,7 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // Šp“x•\¦—p
+    // è§’åº¦è¡¨ç¤ºç”¨
     // =========================================================
 
     private static float NormalizeAngle(float angle)
