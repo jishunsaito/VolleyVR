@@ -11,13 +11,10 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Controller")]
-
     [SerializeField]
     private ImageController imageController;
 
-
     [Header("Output")]
-
     [SerializeField]
     private TMP_Text outputText;
 
@@ -27,7 +24,6 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Shift UI")]
-
     [SerializeField]
     private Slider shiftSlider;
 
@@ -40,7 +36,6 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Focal Length UI")]
-
     [SerializeField]
     private Slider focalLengthSlider;
 
@@ -53,7 +48,6 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Baseline UI")]
-
     [SerializeField]
     private Slider baselineSlider;
 
@@ -66,7 +60,6 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Position X UI")]
-
     [SerializeField]
     private Slider positionXSlider;
 
@@ -79,7 +72,6 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Position Y UI")]
-
     [SerializeField]
     private Slider positionYSlider;
 
@@ -92,7 +84,6 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Position Z UI")]
-
     [SerializeField]
     private Slider positionZSlider;
 
@@ -105,7 +96,6 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Pitch UI")]
-
     [SerializeField]
     private Slider pitchSlider;
 
@@ -115,69 +105,53 @@ public class UIController : MonoBehaviour
 
     // =========================================================
     // Sliderの初期範囲
-    // Inspectorから自由に変更可能
+    // Inspectorから変更可能
     // =========================================================
 
-    [Header("Shift Range")]
 
-    [SerializeField]
-    private int shiftMin = -1000;
+    private int shiftMin = -500;
 
-    [SerializeField]
-    private int shiftMax = 1000;
+    private int shiftMax = 500;
 
 
-    [Header("Focal Length Range [mm]")]
-
-    [SerializeField]
     private float focalLengthMin = 1.0f;
 
-    [SerializeField]
+
     private float focalLengthMax = 300.0f;
 
 
-    [Header("Baseline Range [mm]")]
 
-    [SerializeField]
     private float baselineMin = 0.0f;
 
-    [SerializeField]
+
     private float baselineMax = 5000.0f;
 
 
-    [Header("Position X Range")]
 
-    [SerializeField]
     private float positionXMin = -100.0f;
 
-    [SerializeField]
+
     private float positionXMax = 100.0f;
 
 
-    [Header("Position Y Range")]
 
-    [SerializeField]
-    private float positionYMin = -100.0f;
-
-    [SerializeField]
-    private float positionYMax = 100.0f;
+    private float positionYMin = -200.0f;
 
 
-    [Header("Position Z Range")]
+    private float positionYMax = 200.0f;
 
-    [SerializeField]
-    private float positionZMin = -100.0f;
 
-    [SerializeField]
+
+    private float positionZMin = -300.0f;
+
+
     private float positionZMax = 100.0f;
 
 
-    [Header("Pitch Range [deg]")]
 
-    [SerializeField]
     private float pitchMin = -60.0f;
 
-    [SerializeField]
+
     private float pitchMax = 60.0f;
 
 
@@ -236,21 +210,13 @@ public class UIController : MonoBehaviour
         BindParameter(
             shiftSlider,
             shiftInputField,
-
-            // ImageControllerから初期値を取得
             () => imageController.shiftPixels,
-
-            // floatをintへ変換してImageControllerへ設定
             value =>
                 imageController.shiftPixels =
                     Mathf.RoundToInt(value),
-
             shiftMin,
             shiftMax,
-
             "F0",
-
-            // Shiftだけ整数
             true
         );
     }
@@ -265,15 +231,10 @@ public class UIController : MonoBehaviour
         BindParameter(
             focalLengthSlider,
             focalLengthInputField,
-
             () => imageController.focalLength,
-
-            value =>
-                imageController.focalLength = value,
-
+            value => imageController.focalLength = value,
             focalLengthMin,
             focalLengthMax,
-
             "F1"
         );
     }
@@ -288,15 +249,10 @@ public class UIController : MonoBehaviour
         BindParameter(
             baselineSlider,
             baselineInputField,
-
             () => imageController.baseline,
-
-            value =>
-                imageController.baseline = value,
-
+            value => imageController.baseline = value,
             baselineMin,
             baselineMax,
-
             "F1"
         );
     }
@@ -311,9 +267,7 @@ public class UIController : MonoBehaviour
         BindParameter(
             positionXSlider,
             positionXInputField,
-
             () => imageController.stereoCameraPosition.x,
-
             value =>
             {
                 Vector3 position =
@@ -324,10 +278,8 @@ public class UIController : MonoBehaviour
                 imageController.stereoCameraPosition =
                     position;
             },
-
             positionXMin,
             positionXMax,
-
             "F3"
         );
     }
@@ -342,9 +294,7 @@ public class UIController : MonoBehaviour
         BindParameter(
             positionYSlider,
             positionYInputField,
-
             () => imageController.stereoCameraPosition.y,
-
             value =>
             {
                 Vector3 position =
@@ -355,10 +305,8 @@ public class UIController : MonoBehaviour
                 imageController.stereoCameraPosition =
                     position;
             },
-
             positionYMin,
             positionYMax,
-
             "F3"
         );
     }
@@ -373,9 +321,7 @@ public class UIController : MonoBehaviour
         BindParameter(
             positionZSlider,
             positionZInputField,
-
             () => imageController.stereoCameraPosition.z,
-
             value =>
             {
                 Vector3 position =
@@ -386,10 +332,8 @@ public class UIController : MonoBehaviour
                 imageController.stereoCameraPosition =
                     position;
             },
-
             positionZMin,
             positionZMax,
-
             "F3"
         );
     }
@@ -404,16 +348,11 @@ public class UIController : MonoBehaviour
         BindParameter(
             pitchSlider,
             pitchInputField,
-
             () => imageController.stereoCameraRotationX,
-
             value =>
-                imageController.stereoCameraRotationX =
-                    value,
-
+                imageController.stereoCameraRotationX = value,
             pitchMin,
             pitchMax,
-
             "F1"
         );
     }
@@ -444,18 +383,12 @@ public class UIController : MonoBehaviour
             return;
         }
 
-        // 整数／小数設定
         slider.wholeNumbers = wholeNumbers;
 
         inputField.contentType =
             wholeNumbers
                 ? TMP_InputField.ContentType.IntegerNumber
                 : TMP_InputField.ContentType.DecimalNumber;
-
-
-        // =====================================================
-        // ImageControllerの値を初期値として取得
-        // =====================================================
 
         float initialValue = getter();
 
@@ -464,12 +397,8 @@ public class UIController : MonoBehaviour
             initialValue = Mathf.Round(initialValue);
         }
 
-
-        // =====================================================
-        // Sliderの範囲を設定
-        // 初期値が範囲外なら自動的に範囲を拡張
-        // =====================================================
-
+        // ImageControllerの初期値が範囲外の場合は、
+        // Controller側を変更せずSlider範囲を拡張する。
         SetInitialSliderRange(
             slider,
             defaultMin,
@@ -478,20 +407,12 @@ public class UIController : MonoBehaviour
             wholeNumbers
         );
 
-
-        // ImageControllerの値は変更せず、
-        // SliderとInputFieldだけ初期値に合わせる
         SynchronizeControls(
             slider,
             inputField,
             initialValue,
             format
         );
-
-
-        // =====================================================
-        // Sliderを操作した場合
-        // =====================================================
 
         slider.onValueChanged.AddListener(value =>
         {
@@ -519,11 +440,6 @@ public class UIController : MonoBehaviour
             UpdateOutputText();
         });
 
-
-        // =====================================================
-        // InputFieldを操作した場合
-        // =====================================================
-
         inputField.onEndEdit.AddListener(text =>
         {
             if (isSynchronizing)
@@ -533,14 +449,11 @@ public class UIController : MonoBehaviour
 
             if (!TryParseFloat(text, out float inputValue))
             {
-                // 数値として解釈できない場合は、
-                // ImageControllerの現在値へ戻す
                 float currentValue = getter();
 
                 if (wholeNumbers)
                 {
-                    currentValue =
-                        Mathf.Round(currentValue);
+                    currentValue = Mathf.Round(currentValue);
                 }
 
                 SynchronizeControls(
@@ -555,19 +468,16 @@ public class UIController : MonoBehaviour
 
             if (wholeNumbers)
             {
-                inputValue =
-                    Mathf.Round(inputValue);
+                inputValue = Mathf.Round(inputValue);
             }
 
-
-            // 入力値が現在のSlider範囲外なら、
-            // Slider側の範囲を自動的に拡張
+            // InputFieldから現在の範囲外の値を入力した場合は、
+            // Slider範囲を自動的に拡張する。
             ExpandSliderRange(
                 slider,
                 inputValue,
                 wholeNumbers
             );
-
 
             setter(inputValue);
 
@@ -584,6 +494,106 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
+    // Reset・Load後にImageControllerの値をUIへ再反映
+    // ParameterPresetManagerから呼び出す
+    // =========================================================
+
+    public void RefreshFromController()
+    {
+        if (imageController == null)
+        {
+            return;
+        }
+
+        RefreshParameter(
+            shiftSlider,
+            shiftInputField,
+            imageController.shiftPixels,
+            "F0",
+            true
+        );
+
+        RefreshParameter(
+            focalLengthSlider,
+            focalLengthInputField,
+            imageController.focalLength,
+            "F1"
+        );
+
+        RefreshParameter(
+            baselineSlider,
+            baselineInputField,
+            imageController.baseline,
+            "F1"
+        );
+
+        RefreshParameter(
+            positionXSlider,
+            positionXInputField,
+            imageController.stereoCameraPosition.x,
+            "F3"
+        );
+
+        RefreshParameter(
+            positionYSlider,
+            positionYInputField,
+            imageController.stereoCameraPosition.y,
+            "F3"
+        );
+
+        RefreshParameter(
+            positionZSlider,
+            positionZInputField,
+            imageController.stereoCameraPosition.z,
+            "F3"
+        );
+
+        RefreshParameter(
+            pitchSlider,
+            pitchInputField,
+            imageController.stereoCameraRotationX,
+            "F1"
+        );
+
+        UpdateOutputText();
+    }
+
+
+    private void RefreshParameter(
+        Slider slider,
+        TMP_InputField inputField,
+        float value,
+        string format,
+        bool wholeNumbers = false
+    )
+    {
+        if (slider == null || inputField == null)
+        {
+            return;
+        }
+
+        if (wholeNumbers)
+        {
+            value = Mathf.Round(value);
+        }
+
+        // 読み込んだ値が現在の範囲外なら範囲を拡張する。
+        ExpandSliderRange(
+            slider,
+            value,
+            wholeNumbers
+        );
+
+        SynchronizeControls(
+            slider,
+            inputField,
+            value,
+            format
+        );
+    }
+
+
+    // =========================================================
     // Sliderの初期範囲設定
     // =========================================================
 
@@ -595,14 +605,12 @@ public class UIController : MonoBehaviour
         bool wholeNumbers
     )
     {
-        // minとmaxを逆に設定しても修正する
         float minValue =
             Mathf.Min(defaultMin, defaultMax);
 
         float maxValue =
             Mathf.Max(defaultMin, defaultMax);
 
-        // 初期値が範囲外なら範囲を拡張
         if (initialValue < minValue)
         {
             minValue = initialValue;
@@ -619,7 +627,6 @@ public class UIController : MonoBehaviour
             maxValue = Mathf.Ceil(maxValue);
         }
 
-        // minとmaxが同じだとSliderが動かないので補正
         if (Mathf.Approximately(minValue, maxValue))
         {
             minValue -= 1.0f;
@@ -632,7 +639,7 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
-    // InputFieldの入力値に応じてSlider範囲を拡張
+    // InputFieldやLoad値に応じてSlider範囲を拡張
     // =========================================================
 
     private static void ExpandSliderRange(
@@ -644,7 +651,6 @@ public class UIController : MonoBehaviour
         float minValue = slider.minValue;
         float maxValue = slider.maxValue;
 
-        // 現在の範囲の10%を余白として確保
         float currentRange =
             Mathf.Max(maxValue - minValue, 1.0f);
 
@@ -728,7 +734,6 @@ public class UIController : MonoBehaviour
             return true;
         }
 
-        // カンマ小数にも対応
         string normalizedText =
             text.Trim().Replace(',', '.');
 
@@ -747,8 +752,7 @@ public class UIController : MonoBehaviour
 
     private void UpdateOutputText()
     {
-        if (outputText == null ||
-            imageController == null)
+        if (outputText == null || imageController == null)
         {
             return;
         }
@@ -758,21 +762,16 @@ public class UIController : MonoBehaviour
 
         outputText.text =
             "<b>Image Parameters</b>\n" +
-            $"Shift Pixels : " +
-            $"{imageController.shiftPixels} px\n\n" +
+            $"Shift Pixels : {imageController.shiftPixels} px\n\n" +
 
             "<b>Stereo Camera Parameters</b>\n" +
-            $"Baseline : " +
-            $"{imageController.baseline:F1} mm\n" +
-            $"Focal Length : " +
-            $"{imageController.focalLength:F1} mm\n\n" +
+            $"Baseline : {imageController.baseline:F1} mm\n" +
+            $"Focal Length : {imageController.focalLength:F1} mm\n\n" +
 
             "<b>Stereo Camera Transform</b>\n" +
             $"Position X : {position.x:F3}\n" +
             $"Position Y : {position.y:F3}\n" +
             $"Position Z : {position.z:F3}\n" +
-            $"Pitch : " +
-            $"{imageController.stereoCameraRotationX:F1}" +
-            "\u00B0";
+            $"Pitch : {imageController.stereoCameraRotationX:F1}\u00B0";
     }
 }
