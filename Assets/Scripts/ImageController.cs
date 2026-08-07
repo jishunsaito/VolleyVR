@@ -1,12 +1,13 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 public class ImageController : MonoBehaviour
 {
     // =========================================================
-    // 画像シフト
+    // Materials
     // =========================================================
 
-    [Header("Shift Materials")]
+    [Header("Main Display Materials")]
 
     [SerializeField]
     private Material leftMaterial;
@@ -14,19 +15,67 @@ public class ImageController : MonoBehaviour
     [SerializeField]
     private Material rightMaterial;
 
+
+    [Header("Preview Materials")]
+
+    [Tooltip("UIのLeft RawImageに使用するMaterial")]
+    [SerializeField]
+    private Material leftPreviewMaterial;
+
+    [Tooltip("UIのRight RawImageに使用するMaterial")]
+    [SerializeField]
+    private Material rightPreviewMaterial;
+
+
+    // =========================================================
+    // Preview RawImages
+    // =========================================================
+
+    [Header("Preview RawImages")]
+
+    [Tooltip("左目映像確認用のRawImage")]
+    [SerializeField]
+    private RawImage leftPreviewRawImage;
+
+    [Tooltip("右目映像確認用のRawImage")]
+    [SerializeField]
+    private RawImage rightPreviewRawImage;
+
+
+    // =========================================================
+    // Image Shift
+    // =========================================================
+
     [Header("Image Shift")]
 
-    [Tooltip("正の値で左画像と右画像を逆方向にシフトします")]
+    [Tooltip(
+        "左右画像を逆方向にシフトする量[pixel]"
+    )]
     public int shiftPixels = 0;
 
 
     // =========================================================
-    // ステレオカメラ
+    // Guard Band
+    // =========================================================
+
+    [Header("Guard Band")]
+
+    [Tooltip(
+        "最終表示領域の左右に追加でレンダリングする幅[pixel]。\n" +
+        "最大Shift以上にしてください。"
+    )]
+    [Min(0)]
+    [SerializeField]
+    private int guardBandPixels = 500;
+
+
+    // =========================================================
+    // Stereo Camera
     // =========================================================
 
     [Header("Stereo Camera Objects")]
 
-    [Tooltip("左右カメラを子に持つ親オブジェクト")]
+    [Tooltip("左右Cameraを子に持つ親Transform")]
     [SerializeField]
     private Transform stereoCameraRoot;
 
@@ -38,163 +87,640 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // 基線長
+    // Baseline
     // =========================================================
 
-    [Header("Baseline[mm]")]
+    [Header("Baseline [mm]")]
 
     [Min(0.0f)]
     public float baseline = 100.0f;
 
 
-
     // =========================================================
-    // 焦点距離
+    // Focal Length
     // =========================================================
 
-    [Header("Focal Length")]
+    [Header("Focal Length [mm]")]
 
-    [Tooltip("左右カメラに設定する焦点距離［mm］")]
     [Min(0.1f)]
     public float focalLength = 90.0f;
 
 
     // =========================================================
-    // ステレオカメラ親の位置と回転
+    // Stereo Camera Transform
     // =========================================================
 
     [Header("Stereo Camera Root Transform")]
 
-    [Tooltip("ステレオカメラ親オブジェクトのローカル座標")]
-    public Vector3 stereoCameraPosition = Vector3.zero;
+    public Vector3 stereoCameraPosition =
+        Vector3.zero;
 
-    [Tooltip("ステレオカメラ親オブジェクトのX軸回転［deg］")]
-    public float stereoCameraRotationX = 0.0f;
+    public float stereoCameraRotationX =
+        0.0f;
 
 
     // =========================================================
-    // Shaderプロパティ
+    // Shader Property IDs
     // =========================================================
 
     private static readonly int ShiftPixelsProperty =
         Shader.PropertyToID("_ShiftPixels");
 
+    private static readonly int GuardBandPixelsProperty =
+        Shader.PropertyToID("_GuardBandPixels");
+
+    private static readonly int PreviewModeProperty =
+        Shader.PropertyToID("_PreviewMode");
+
+    private static readonly int MainTextureProperty =
+        Shader.PropertyToID("_MainTex");
+
 
     // =========================================================
-    // Unityイベント
+    // Original Camera Settings
+    // =========================================================
+
+    private RenderTexture originalLeftTexture;
+    private RenderTexture originalRightTexture;
+
+    private Vector2 originalLeftSensorSize;
+    private Vector2 originalRightSensorSize;
+
+
+    // =========================================================
+    // Runtime Guard Band RenderTextures
+    // =========================================================
+
+    private RenderTexture leftGuardTexture;
+    private RenderTexture rightGuardTexture;
+
+
+    // =========================================================
+    // Unity
     // =========================================================
 
     private void Reset()
     {
-        // このスクリプトをStereo Camera親に付けた場合は、
-        // 自分自身を親オブジェクトとして登録
-        stereoCameraRoot = transform;
+        stereoCameraRoot =
+            transform;
 
-        stereoCameraPosition = transform.localPosition;
-        stereoCameraRotationX = NormalizeAngle(
-            transform.localEulerAngles.x
-        );
+        stereoCameraPosition =
+            transform.localPosition;
+
+        stereoCameraRotationX =
+            NormalizeAngle(
+                transform.localEulerAngles.x
+            );
     }
+
+
+    private void Awake()
+    {
+        CacheOriginalCameraSettings();
+    }
+
+
+    private void Start()
+    {
+        CreateGuardBandRenderTextures();
+
+        ApplyTexturesToMaterials();
+
+        ApplyMaterialModes();
+
+        ApplyAllParameters();
+    }
+
 
     private void Update()
     {
         ApplyImageShift();
+
         ApplyBaseline();
+
         ApplyFocalLength();
+
         ApplyStereoCameraTransform();
     }
 
 
+    private void OnDestroy()
+    {
+        RestoreOriginalCameraSettings();
+
+        ReleaseGuardBandTextures();
+    }
+
+
     // =========================================================
-    // 画像シフト
+    // Initial Cache
     // =========================================================
 
-    private void ApplyImageShift()
+    private void CacheOriginalCameraSettings()
     {
-        if (leftMaterial != null)
+        if (leftCamera != null)
         {
-            leftMaterial.SetFloat(
-                ShiftPixelsProperty,
-                shiftPixels
-            );
+            originalLeftTexture =
+                leftCamera.targetTexture;
+
+            originalLeftSensorSize =
+                leftCamera.sensorSize;
         }
 
-        if (rightMaterial != null)
+        if (rightCamera != null)
         {
-            rightMaterial.SetFloat(
-                ShiftPixelsProperty,
-                -shiftPixels
-            );
+            originalRightTexture =
+                rightCamera.targetTexture;
+
+            originalRightSensorSize =
+                rightCamera.sensorSize;
         }
     }
 
 
     // =========================================================
-    // 基線長
+    // Guard Band RenderTexture
     // =========================================================
 
-    private void ApplyBaseline()
+    private void CreateGuardBandRenderTextures()
     {
-        if (leftCamera == null || rightCamera == null)
+        if (leftCamera == null ||
+            rightCamera == null)
+        {
+            Debug.LogError(
+                "LeftCamera / RightCamera が設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+
+        if (originalLeftTexture == null ||
+            originalRightTexture == null)
+        {
+            Debug.LogError(
+                "LeftCamera / RightCamera に" +
+                "元のRenderTextureを設定してください。",
+                this
+            );
+
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // Left
+        // -----------------------------------------------------
+
+        leftGuardTexture =
+            CreateGuardTexture(
+                originalLeftTexture,
+                "LeftEye_GuardBand"
+            );
+
+
+        // -----------------------------------------------------
+        // Right
+        // -----------------------------------------------------
+
+        rightGuardTexture =
+            CreateGuardTexture(
+                originalRightTexture,
+                "RightEye_GuardBand"
+            );
+
+
+        // Cameraの出力先を
+        // Guard Band付きRenderTextureへ変更
+        leftCamera.targetTexture =
+            leftGuardTexture;
+
+        rightCamera.targetTexture =
+            rightGuardTexture;
+
+
+        // -----------------------------------------------------
+        // CameraのSensor Widthを拡張
+        // -----------------------------------------------------
+
+        ApplyGuardBandSensorSize();
+    }
+
+
+    private RenderTexture CreateGuardTexture(
+        RenderTexture source,
+        string textureName
+    )
+    {
+        RenderTextureDescriptor descriptor =
+            source.descriptor;
+
+
+        // 元の表示幅
+        int visibleWidth =
+            source.width;
+
+
+        // 左右Guard Bandを追加
+        descriptor.width =
+            visibleWidth +
+            guardBandPixels * 2;
+
+
+        // 高さは変更しない
+        descriptor.height =
+            source.height;
+
+
+        RenderTexture texture =
+            new RenderTexture(
+                descriptor
+            );
+
+
+        texture.name =
+            textureName;
+
+
+        texture.filterMode =
+            source.filterMode;
+
+        texture.wrapMode =
+            TextureWrapMode.Clamp;
+
+
+        texture.Create();
+
+
+        return texture;
+    }
+
+
+    // =========================================================
+    // Sensor Size
+    // =========================================================
+
+    private void ApplyGuardBandSensorSize()
+    {
+        if (leftCamera != null &&
+            originalLeftTexture != null)
+        {
+            float scale =
+                GetOverscanScale(
+                    originalLeftTexture.width
+                );
+
+
+            leftCamera.sensorSize =
+                new Vector2(
+                    originalLeftSensorSize.x *
+                    scale,
+
+                    originalLeftSensorSize.y
+                );
+        }
+
+
+        if (rightCamera != null &&
+            originalRightTexture != null)
+        {
+            float scale =
+                GetOverscanScale(
+                    originalRightTexture.width
+                );
+
+
+            rightCamera.sensorSize =
+                new Vector2(
+                    originalRightSensorSize.x *
+                    scale,
+
+                    originalRightSensorSize.y
+                );
+        }
+    }
+
+
+    private float GetOverscanScale(
+        int visibleWidth
+    )
+    {
+        if (visibleWidth <= 0)
+        {
+            return 1.0f;
+        }
+
+
+        float guardWidth =
+            visibleWidth +
+            guardBandPixels * 2.0f;
+
+
+        return
+            guardWidth /
+            visibleWidth;
+    }
+
+
+    // =========================================================
+    // Texture Assignment
+    // =========================================================
+
+    private void ApplyTexturesToMaterials()
+    {
+        // -----------------------------------------------------
+        // Main Display
+        // -----------------------------------------------------
+
+        if (leftMaterial != null &&
+            leftGuardTexture != null)
+        {
+            leftMaterial.SetTexture(
+                MainTextureProperty,
+                leftGuardTexture
+            );
+        }
+
+
+        if (rightMaterial != null &&
+            rightGuardTexture != null)
+        {
+            rightMaterial.SetTexture(
+                MainTextureProperty,
+                rightGuardTexture
+            );
+        }
+
+
+        // -----------------------------------------------------
+        // Preview Material
+        // -----------------------------------------------------
+
+        if (leftPreviewMaterial != null &&
+            leftGuardTexture != null)
+        {
+            leftPreviewMaterial.SetTexture(
+                MainTextureProperty,
+                leftGuardTexture
+            );
+        }
+
+
+        if (rightPreviewMaterial != null &&
+            rightGuardTexture != null)
+        {
+            rightPreviewMaterial.SetTexture(
+                MainTextureProperty,
+                rightGuardTexture
+            );
+        }
+
+
+        // -----------------------------------------------------
+        // RawImage
+        // -----------------------------------------------------
+
+        if (leftPreviewRawImage != null &&
+            leftGuardTexture != null)
+        {
+            leftPreviewRawImage.texture =
+                leftGuardTexture;
+        }
+
+
+        if (rightPreviewRawImage != null &&
+            rightGuardTexture != null)
+        {
+            rightPreviewRawImage.texture =
+                rightGuardTexture;
+        }
+    }
+
+
+    // =========================================================
+    // Preview / Wheatstone Mode
+    // =========================================================
+
+    private void ApplyMaterialModes()
+    {
+        /*
+         * Main Display
+         *
+         * PreviewMode = 0
+         *
+         * Shader側で水平反転。
+         * Wheatstoneの鏡を通したとき
+         * 正しい向きになる。
+         */
+
+        SetMaterialMode(
+            leftMaterial,
+            false
+        );
+
+        SetMaterialMode(
+            rightMaterial,
+            false
+        );
+
+
+        /*
+         * UI Preview
+         *
+         * PreviewMode = 1
+         *
+         * 水平反転しない。
+         * RawImageのAlphaも使用する。
+         */
+
+        SetMaterialMode(
+            leftPreviewMaterial,
+            true
+        );
+
+        SetMaterialMode(
+            rightPreviewMaterial,
+            true
+        );
+    }
+
+
+    private void SetMaterialMode(
+        Material material,
+        bool previewMode
+    )
+    {
+        if (material == null)
         {
             return;
         }
 
-        /*
-         * 例：
-         * baseline = 100 mm
-         * baselineUnitScale = 0.001
-         *
-         * 左カメラX = -0.05 Unity Unit
-         * 右カメラX = +0.05 Unity Unit
-         *
-         * mm表記では左-50 mm、右+50 mm
-         */
-        float halfBaseline =
-            baseline * 0.5f * 0.001f;
 
-        // 左カメラ
-        Vector3 leftPosition =
-            leftCamera.transform.localPosition;
+        material.SetFloat(
+            PreviewModeProperty,
+            previewMode
+                ? 1.0f
+                : 0.0f
+        );
 
-        leftPosition.x = -halfBaseline;
 
-        leftCamera.transform.localPosition =
-            leftPosition;
-
-        // 右カメラ
-        Vector3 rightPosition =
-            rightCamera.transform.localPosition;
-
-        rightPosition.x = halfBaseline;
-
-        rightCamera.transform.localPosition =
-            rightPosition;
+        material.SetFloat(
+            GuardBandPixelsProperty,
+            guardBandPixels
+        );
     }
 
 
     // =========================================================
-    // 焦点距離
+    // Image Shift
+    // =========================================================
+
+    private void ApplyImageShift()
+    {
+        /*
+         * 論理上のShift方向は
+         * PreviewとMain Displayで同じ。
+         *
+         * Main DisplayはShader側で
+         * 事前にMirrorしているので、
+         * Wheatstoneの物理Mirrorを通した後に
+         * Previewと同じ方向に見える。
+         */
+
+        ApplyShiftToMaterial(
+            leftMaterial,
+            shiftPixels
+        );
+
+        ApplyShiftToMaterial(
+            rightMaterial,
+            -shiftPixels
+        );
+
+
+        ApplyShiftToMaterial(
+            leftPreviewMaterial,
+            shiftPixels
+        );
+
+        ApplyShiftToMaterial(
+            rightPreviewMaterial,
+            -shiftPixels
+        );
+    }
+
+
+    private void ApplyShiftToMaterial(
+        Material material,
+        float shift
+    )
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+
+        material.SetFloat(
+            ShiftPixelsProperty,
+            shift
+        );
+
+
+        material.SetFloat(
+            GuardBandPixelsProperty,
+            guardBandPixels
+        );
+    }
+
+
+    // =========================================================
+    // Baseline
+    // =========================================================
+
+    private void ApplyBaseline()
+    {
+        if (leftCamera == null ||
+            rightCamera == null)
+        {
+            return;
+        }
+
+
+        float halfBaseline =
+            baseline *
+            0.5f *
+            0.001f;
+
+
+        // Left
+        Vector3 leftPosition =
+            leftCamera
+                .transform
+                .localPosition;
+
+        leftPosition.x =
+            -halfBaseline;
+
+        leftCamera
+            .transform
+            .localPosition =
+                leftPosition;
+
+
+        // Right
+        Vector3 rightPosition =
+            rightCamera
+                .transform
+                .localPosition;
+
+        rightPosition.x =
+            halfBaseline;
+
+        rightCamera
+            .transform
+            .localPosition =
+                rightPosition;
+    }
+
+
+    // =========================================================
+    // Focal Length
     // =========================================================
 
     private void ApplyFocalLength()
     {
         if (leftCamera != null)
         {
-            leftCamera.usePhysicalProperties = true;
-            leftCamera.focalLength = focalLength;
+            leftCamera.usePhysicalProperties =
+                true;
+
+            leftCamera.focalLength =
+                focalLength;
         }
+
 
         if (rightCamera != null)
         {
-            rightCamera.usePhysicalProperties = true;
-            rightCamera.focalLength = focalLength;
+            rightCamera.usePhysicalProperties =
+                true;
+
+            rightCamera.focalLength =
+                focalLength;
         }
+
+
+        /*
+         * 焦点距離を変更しても
+         * Guard Band用Sensor Widthは維持。
+         */
+        ApplyGuardBandSensorSize();
     }
 
 
     // =========================================================
-    // 親オブジェクトの位置・回転
+    // Stereo Camera Transform
     // =========================================================
 
     private void ApplyStereoCameraTransform()
@@ -204,16 +730,19 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-        // 親オブジェクト全体のXYZ座標
+
         stereoCameraRoot.localPosition =
             stereoCameraPosition;
 
-        // Y軸、Z軸回転は現在値を維持し、X軸だけ変更
+
         Vector3 currentEulerAngles =
-            stereoCameraRoot.localEulerAngles;
+            stereoCameraRoot
+                .localEulerAngles;
+
 
         currentEulerAngles.x =
             stereoCameraRotationX;
+
 
         stereoCameraRoot.localEulerAngles =
             currentEulerAngles;
@@ -221,15 +750,95 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // 角度表示用
+    // Apply All
     // =========================================================
 
-    private static float NormalizeAngle(float angle)
+    private void ApplyAllParameters()
+    {
+        ApplyImageShift();
+
+        ApplyBaseline();
+
+        ApplyFocalLength();
+
+        ApplyStereoCameraTransform();
+    }
+
+
+    // =========================================================
+    // Restore
+    // =========================================================
+
+    private void RestoreOriginalCameraSettings()
+    {
+        if (leftCamera != null)
+        {
+            leftCamera.targetTexture =
+                originalLeftTexture;
+
+            leftCamera.sensorSize =
+                originalLeftSensorSize;
+        }
+
+
+        if (rightCamera != null)
+        {
+            rightCamera.targetTexture =
+                originalRightTexture;
+
+            rightCamera.sensorSize =
+                originalRightSensorSize;
+        }
+    }
+
+
+    // =========================================================
+    // Release Runtime Textures
+    // =========================================================
+
+    private void ReleaseGuardBandTextures()
+    {
+        if (leftGuardTexture != null)
+        {
+            leftGuardTexture.Release();
+
+            Destroy(
+                leftGuardTexture
+            );
+
+            leftGuardTexture =
+                null;
+        }
+
+
+        if (rightGuardTexture != null)
+        {
+            rightGuardTexture.Release();
+
+            Destroy(
+                rightGuardTexture
+            );
+
+            rightGuardTexture =
+                null;
+        }
+    }
+
+
+    // =========================================================
+    // Utility
+    // =========================================================
+
+    private static float NormalizeAngle(
+        float angle
+    )
     {
         if (angle > 180.0f)
         {
-            angle -= 360.0f;
+            angle -=
+                360.0f;
         }
+
 
         return angle;
     }

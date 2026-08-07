@@ -45,6 +45,21 @@ public class BallDisparityCalculator : MonoBehaviour
 
 
     // =========================================================
+    // Display / Viewer Geometry
+    // =========================================================
+
+    [Header("Display / Viewer Geometry")]
+
+    [Tooltip("最終表示ディスプレイの1 pixelあたりの物理幅 [mm/px]")]
+    [SerializeField]
+    private float displayPixelPitchMm = 0.1845236f;
+
+    // 今回は固定条件
+    private const float ViewingDistanceMm = 936.0f;
+    private const float IpdMm = 63.0f;
+
+
+    // =========================================================
     // Result
     // =========================================================
 
@@ -53,24 +68,25 @@ public class BallDisparityCalculator : MonoBehaviour
     /// </summary>
     public bool HasBall { get; private set; }
 
+    /// <summary>
+    /// 現在の状態
+    /// </summary>
+    public string StatusMessage { get; private set; } = "Ball : Not Found";
 
     /// <summary>
     /// BallのWorld Position
     /// </summary>
     public Vector3 BallWorldPosition { get; private set; }
 
-
     /// <summary>
     /// カメラ光軸方向の奥行き [m]
     /// </summary>
     public float DepthMeters { get; private set; }
 
-
     /// <summary>
     /// カメラ光軸方向の奥行き [mm]
     /// </summary>
     public float DepthMm { get; private set; }
-
 
     /// <summary>
     /// センサー面上の幾何学的視差 [mm]
@@ -78,17 +94,27 @@ public class BallDisparityCalculator : MonoBehaviour
     /// </summary>
     public float DisparityMm { get; private set; }
 
-
     /// <summary>
     /// 画像上の幾何学的視差 [pixel]
     /// </summary>
     public float DisparityPixels { get; private set; }
 
-
     /// <summary>
     /// Horizontal Shift適用後の視差 [pixel]
     /// </summary>
     public float ShiftedDisparityPixels { get; private set; }
+
+    /// <summary>
+    /// Shift前の視差角 [deg]
+    /// 画面中央注視時を0 degとした相対視差角
+    /// </summary>
+    public float DisparityAngleDeg { get; private set; }
+
+    /// <summary>
+    /// Shift後の視差角 [deg]
+    /// 画面中央注視時を0 degとした相対視差角
+    /// </summary>
+    public float ShiftedDisparityAngleDeg { get; private set; }
 
 
     // =========================================================
@@ -98,7 +124,6 @@ public class BallDisparityCalculator : MonoBehaviour
     private void Update()
     {
         FindBallIfNeeded();
-
         CalculateDisparity();
     }
 
@@ -109,58 +134,33 @@ public class BallDisparityCalculator : MonoBehaviour
 
     private void FindBallIfNeeded()
     {
-        /*
-         * 以前取得したBallがまだ存在し、
-         * Activeならそのまま使用する。
-         */
+        // 以前取得したBallがまだ存在し、Activeならそのまま使用
         if (ballTransform != null &&
             ballTransform.gameObject.activeInHierarchy)
         {
             return;
         }
 
+        // Destroy / InactiveになったBall参照を破棄
+        ballTransform = null;
 
-        /*
-         * Destroyされた場合やInactiveの場合は
-         * 一旦参照をクリア。
-         */
-        if (ballTransform == null ||
-            !ballTransform.gameObject.activeInHierarchy)
-        {
-            ballTransform = null;
-        }
-
-
-        /*
-         * 現在シーン内に存在するActiveなBallを探す。
-         *
-         * トス終了後にBallがDestroyされ、
-         * Zキーで新しくInstantiateされた場合も、
-         * 新しいBallをここで再取得できる。
-         */
         GameObject ballObject = null;
 
         try
         {
             ballObject =
-                GameObject.FindGameObjectWithTag(
-                    ballTag
-                );
+                GameObject.FindGameObjectWithTag(ballTag);
         }
         catch (UnityException)
         {
-            /*
-             * "Ball" Tag自体がUnity側に登録されていない場合。
-             */
             HasBall = false;
+            StatusMessage = $"Tag '{ballTag}' : Not Registered";
             return;
         }
 
-
         if (ballObject != null)
         {
-            ballTransform =
-                ballObject.transform;
+            ballTransform = ballObject.transform;
         }
     }
 
@@ -172,22 +172,41 @@ public class BallDisparityCalculator : MonoBehaviour
     private void CalculateDisparity()
     {
         // -----------------------------------------------------
-        // 必要なオブジェクトが存在するか
+        // Reference check
         // -----------------------------------------------------
 
-        if (imageController == null ||
-            stereoCameraRoot == null ||
-            referenceCamera == null ||
-            ballTransform == null)
+        if (imageController == null)
         {
             HasBall = false;
+            StatusMessage = "ImageController : Not Assigned";
             return;
         }
 
+        if (stereoCameraRoot == null)
+        {
+            HasBall = false;
+            StatusMessage = "Stereo Camera Root : Not Assigned";
+            return;
+        }
+
+        if (referenceCamera == null)
+        {
+            HasBall = false;
+            StatusMessage = "Reference Camera : Not Assigned";
+            return;
+        }
+
+        if (ballTransform == null)
+        {
+            HasBall = false;
+            StatusMessage = "Ball : Not Found";
+            return;
+        }
 
         if (!ballTransform.gameObject.activeInHierarchy)
         {
             HasBall = false;
+            StatusMessage = "Ball : Inactive";
             return;
         }
 
@@ -212,11 +231,8 @@ public class BallDisparityCalculator : MonoBehaviour
         // =====================================================
         // 奥行き Z
         //
-        // 重要：
-        // Vector3.Distanceではない。
-        //
-        // Camera -> Ballのベクトルを、
-        // カメラ光軸方向へ射影する。
+        // カメラからBallまでの直線距離ではなく、
+        // カメラ光軸方向への射影距離。
         //
         // Z = dot(CameraToBall, CameraForward)
         // =====================================================
@@ -227,20 +243,16 @@ public class BallDisparityCalculator : MonoBehaviour
                 referenceCamera.transform.forward
             );
 
-
-        /*
-         * Ballがカメラより後方にある場合は
-         * 視差計算をしない。
-         */
         if (depthUnity <= 0.0f)
         {
             HasBall = false;
+            StatusMessage = "Ball : Behind Camera";
             return;
         }
 
 
         // =====================================================
-        // Unit変換
+        // Unit Conversion
         // =====================================================
 
         DepthMeters =
@@ -252,11 +264,7 @@ public class BallDisparityCalculator : MonoBehaviour
 
 
         // =====================================================
-        // f, B
-        //
-        // ImageControllerでは
-        // focalLength = mm
-        // baseline    = mm
+        // Camera Parameters
         // =====================================================
 
         float focalLengthMm =
@@ -265,26 +273,20 @@ public class BallDisparityCalculator : MonoBehaviour
         float baselineMm =
             imageController.baseline;
 
-
         if (DepthMm <= 0.0f ||
             focalLengthMm <= 0.0f ||
             baselineMm < 0.0f)
         {
             HasBall = false;
+            StatusMessage = "Invalid Camera Parameters";
             return;
         }
 
 
         // =====================================================
-        // センサー上の視差
+        // Sensor Disparity [mm]
         //
         // d = fB / Z
-        //
-        // f : mm
-        // B : mm
-        // Z : mm
-        //
-        // → d : mm
         // =====================================================
 
         DisparityMm =
@@ -294,13 +296,13 @@ public class BallDisparityCalculator : MonoBehaviour
 
 
         // =====================================================
-        // Pixel上の視差
+        // Image Disparity [pixel]
         //
-        // UnityのProjection Matrixから
-        // 実際の水平方向焦点距離[pixel]を取得する。
+        // Projection Matrixから水平方向焦点距離[pixel]を取得。
         //
-        // これによりSensor Aspect Ratioや
-        // Gate Fitの影響もある程度反映できる。
+        // x_ndc = m00 * X/Z
+        // f_px = width/2 * m00
+        // d_px = f_px * B/Z
         // =====================================================
 
         int imageWidthPixels;
@@ -316,16 +318,6 @@ public class BallDisparityCalculator : MonoBehaviour
                 referenceCamera.pixelWidth;
         }
 
-
-        /*
-         * Projection Matrix:
-         *
-         * x_ndc = m00 * X/Z
-         *
-         * NDC [-1, +1]をpixelへ変換するため
-         *
-         * f_px = width/2 * m00
-         */
         float focalLengthPixels =
             0.5f *
             imageWidthPixels *
@@ -333,12 +325,6 @@ public class BallDisparityCalculator : MonoBehaviour
                 referenceCamera.projectionMatrix.m00
             );
 
-
-        /*
-         * d_px = f_px * B/Z
-         *
-         * BとZは同じ単位ならよい。
-         */
         DisparityPixels =
             focalLengthPixels *
             baselineMm /
@@ -346,26 +332,12 @@ public class BallDisparityCalculator : MonoBehaviour
 
 
         // =====================================================
-        // Shift後の視差
+        // Shift後の視差 [pixel]
         //
-        // 現在の構成
+        // Left  = +shiftPixels
+        // Right = -shiftPixels
         //
-        // Left  Material = +shiftPixels
-        // Right Material = -shiftPixels
-        //
-        // Shader:
-        // uv.x += _ShiftPixels * TexelSize
-        //
-        // +Shiftすると画像自体は左へ移動する。
-        //
-        // よって
-        //
-        // Left  -> 左へ shift
-        // Right -> 右へ shift
-        //
-        // 左右の相対視差は
-        //
-        // d_after = d - 2 * shift
+        // 左右の相対変化量は 2 * shiftPixels
         // =====================================================
 
         ShiftedDisparityPixels =
@@ -374,6 +346,144 @@ public class BallDisparityCalculator : MonoBehaviour
             imageController.shiftPixels;
 
 
+        // =====================================================
+        // Disparity Angle [deg]
+        //
+        // 視距離 936 mm
+        // IPD 63 mm
+        // 観察者は画面中心に固定
+        // =====================================================
+
+        DisparityAngleDeg =
+            DispPxToAngleDeg(
+                DisparityPixels
+            );
+
+        ShiftedDisparityAngleDeg =
+            DispPxToAngleDeg(
+                ShiftedDisparityPixels
+            );
+
+
         HasBall = true;
+        StatusMessage = "OK";
+    }
+
+
+    // =========================================================
+    // Pixel Disparity -> Disparity Angle
+    // =========================================================
+
+    private float DispPxToAngleDeg(
+        float disparityPixels
+    )
+    {
+        // -----------------------------------------------------
+        // Pixel disparity -> Display上の物理距離 [mm]
+        // -----------------------------------------------------
+
+        float disparityMm =
+            disparityPixels *
+            displayPixelPitchMm;
+
+
+        // -----------------------------------------------------
+        // Display座標系
+        //
+        // Display center = (0, 0, 0)
+        // Viewer center  = (0, 0, -936)
+        //
+        // Left Eye  = (-IPD/2, 0, -936)
+        // Right Eye = (+IPD/2, 0, -936)
+        // -----------------------------------------------------
+
+        Vector3 leftEye =
+            new Vector3(
+                -IpdMm * 0.5f,
+                0.0f,
+                -ViewingDistanceMm
+            );
+
+        Vector3 rightEye =
+            new Vector3(
+                IpdMm * 0.5f,
+                0.0f,
+                -ViewingDistanceMm
+            );
+
+
+        // -----------------------------------------------------
+        // 左右画像上の対応点
+        //
+        // 画面中心を基準に左右へ disparity/2 ずつ配置
+        // -----------------------------------------------------
+
+        Vector3 leftPoint =
+            new Vector3(
+                disparityMm * 0.5f,
+                0.0f,
+                0.0f
+            );
+
+        Vector3 rightPoint =
+            new Vector3(
+                -disparityMm * 0.5f,
+                0.0f,
+                0.0f
+            );
+
+        Vector3 midPoint =
+            Vector3.zero;
+
+
+        // -----------------------------------------------------
+        // 視差ありの場合の左右視線
+        // -----------------------------------------------------
+
+        Vector3 leftRayWithDisparity =
+            leftPoint -
+            leftEye;
+
+        Vector3 rightRayWithDisparity =
+            rightPoint -
+            rightEye;
+
+
+        // -----------------------------------------------------
+        // 視差0の場合の左右視線
+        // -----------------------------------------------------
+
+        Vector3 leftRayZeroDisparity =
+            midPoint -
+            leftEye;
+
+        Vector3 rightRayZeroDisparity =
+            midPoint -
+            rightEye;
+
+
+        // -----------------------------------------------------
+        // 元の式と同じ考え方
+        //
+        // alpha : 視差ありの輻輳角
+        // beta  : 画面中心を見るときの輻輳角
+        //
+        // disparity angle = alpha - beta
+        // -----------------------------------------------------
+
+        float alpha =
+            Vector3.Angle(
+                leftRayWithDisparity,
+                rightRayWithDisparity
+            );
+
+        float beta =
+            Vector3.Angle(
+                leftRayZeroDisparity,
+                rightRayZeroDisparity
+            );
+
+        return
+            alpha - beta;
     }
 }

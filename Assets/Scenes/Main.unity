@@ -19277,6 +19277,7 @@ MonoBehaviour:
   referenceCamera: {fileID: 1085836688}
   ballTag: Ball
   unityUnitToMm: 1000
+  displayPixelPitchMm: 0.1845236
 --- !u!4 &1910387836
 Transform:
   m_ObjectHideFlags: 0
@@ -20581,7 +20582,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ImageController
   leftMaterial: {fileID: 2100000, guid: 383bd81c6d854fb418ccbe2d442e925e, type: 2}
   rightMaterial: {fileID: 2100000, guid: 23d94c30674258140b490da303389854, type: 2}
+  leftPreviewMaterial: {fileID: 2100000, guid: 383bd81c6d854fb418ccbe2d442e925e, type: 2}
+  rightPreviewMaterial: {fileID: 2100000, guid: 23d94c30674258140b490da303389854, type: 2}
+  leftPreviewRawImage: {fileID: 1951043278}
+  rightPreviewRawImage: {fileID: 1030155978}
   shiftPixels: 0
+  guardBandPixels: 500
   stereoCameraRoot: {fileID: 1481926998}
   leftCamera: {fileID: 1085836688}
   rightCamera: {fileID: 1808996722}

@@ -1093,9 +1093,15 @@ public class UIController : MonoBehaviour
                 $"Image Disparity : " +
                 $"{disparityCalculator.DisparityPixels:F2} px\n" +
 
+                $"Disparity Angle : " +
+                $"{disparityCalculator.DisparityAngleDeg:F3}°\n" +
+
 
                 $"After Shift : " +
-                $"{disparityCalculator.ShiftedDisparityPixels:F2} px";
+                $"{disparityCalculator.ShiftedDisparityPixels:F2} px\n" +
+
+                $"After Shift Angle : " +
+                $"{disparityCalculator.ShiftedDisparityAngleDeg:F3}°";
         }
 
 
