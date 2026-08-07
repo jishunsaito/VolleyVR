@@ -54,7 +54,7 @@ Shader "Custom/ImageController"
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0;
 
-                // RawImage‚ÌColor
+                // RawImageï¿½ï¿½Color
                 fixed4 color : COLOR;
             };
 
@@ -78,7 +78,7 @@ Shader "Custom/ImageController"
                         _MainTex
                     );
 
-                // RawImage‚ÌColor‚ÆAlpha‚ğó‚¯æ‚é
+                // RawImageï¿½ï¿½Colorï¿½ï¿½Alphaï¿½ï¿½ï¿½ó‚¯ï¿½ï¿½
                 output.color = input.color;
 
                 return output;
@@ -101,15 +101,15 @@ Shader "Custom/ImageController"
                 fixed4 color =
                     tex2D(_MainTex, uv);
 
-                // RawImage‚ÌRGBF‚Í”½‰f
+                // RawImageï¿½ï¿½RGBï¿½Fï¿½Í”ï¿½ï¿½f
                 color.rgb *= input.color.rgb;
 
                 /*
                  * Preview Mode = 0
-                 * RawImage‚ÌAlpha‚ğ–³‹‚µ‚Ä•s“§–¾
+                 * RawImageï¿½ï¿½Alphaï¿½ğ–³ï¿½ï¿½ï¿½ï¿½Ä•sï¿½ï¿½ï¿½ï¿½
                  *
                  * Preview Mode = 1
-                 * RawImage‚ÌAlpha‚ğg—p
+                 * RawImageï¿½ï¿½Alphaï¿½ï¿½ï¿½gï¿½p
                  */
                 float previewEnabled =
                     step(0.5, _PreviewMode);

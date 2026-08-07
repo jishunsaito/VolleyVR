@@ -7,14 +7,31 @@ using UnityEngine.UI;
 public class UIController : MonoBehaviour
 {
     // =========================================================
-    // Controller / Output
+    // Controller
     // =========================================================
 
     [Header("Controller")]
+
     [SerializeField]
     private ImageController imageController;
 
+
+    // =========================================================
+    // Ball Disparity
+    // =========================================================
+
+    [Header("Ball Disparity")]
+
+    [SerializeField]
+    private BallDisparityCalculator disparityCalculator;
+
+
+    // =========================================================
+    // Output
+    // =========================================================
+
     [Header("Output")]
+
     [SerializeField]
     private TMP_Text outputText;
 
@@ -24,6 +41,7 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Shift UI")]
+
     [SerializeField]
     private Slider shiftSlider;
 
@@ -36,6 +54,7 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Focal Length UI")]
+
     [SerializeField]
     private Slider focalLengthSlider;
 
@@ -48,6 +67,7 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Baseline UI")]
+
     [SerializeField]
     private Slider baselineSlider;
 
@@ -60,6 +80,7 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Position X UI")]
+
     [SerializeField]
     private Slider positionXSlider;
 
@@ -72,6 +93,7 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Position Y UI")]
+
     [SerializeField]
     private Slider positionYSlider;
 
@@ -84,6 +106,7 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Position Z UI")]
+
     [SerializeField]
     private Slider positionZSlider;
 
@@ -96,6 +119,7 @@ public class UIController : MonoBehaviour
     // =========================================================
 
     [Header("Pitch UI")]
+
     [SerializeField]
     private Slider pitchSlider;
 
@@ -104,66 +128,43 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
-    // SliderÇÃèâä˙îÕàÕ
-    // InspectorÇ©ÇÁïœçXâ¬î\
+    // Slider Range
+    //
+    // SerializeField„Çí‰ªò„Åë„Å¶„ÅÑ„Å™„ÅÑ„ÅÆ„Åß
+    // Inspector„Å´„ÅØË°®Á§∫„Åï„Çå„Å™„ÅÑ„ÄÇ
     // =========================================================
 
-
     private int shiftMin = -500;
-
     private int shiftMax = 500;
 
-
     private float focalLengthMin = 1.0f;
-
-
     private float focalLengthMax = 300.0f;
 
-
-
     private float baselineMin = 0.0f;
-
-
     private float baselineMax = 5000.0f;
 
-
-
     private float positionXMin = -100.0f;
-
-
     private float positionXMax = 100.0f;
 
-
-
     private float positionYMin = -200.0f;
-
-
     private float positionYMax = 200.0f;
 
-
-
     private float positionZMin = -300.0f;
-
-
     private float positionZMax = 100.0f;
 
-
-
     private float pitchMin = -60.0f;
-
-
     private float pitchMax = 60.0f;
 
 
     // =========================================================
-    // ì‡ïîèàóùóp
+    // Internal
     // =========================================================
 
     private bool isSynchronizing;
 
 
     // =========================================================
-    // UnityÉCÉxÉìÉg
+    // Unity
     // =========================================================
 
     private void Start()
@@ -171,7 +172,7 @@ public class UIController : MonoBehaviour
         if (imageController == null)
         {
             Debug.LogError(
-                "UIControllerÇ…ImageControllerÇ™ê›íËÇ≥ÇÍÇƒÇ¢Ç‹ÇπÇÒÅB",
+                "UIController„Å´ImageController„ÅåË®≠ÂÆö„Åï„Çå„Å¶„ÅÑ„Åæ„Åõ„Çì„ÄÇ",
                 this
             );
 
@@ -179,16 +180,25 @@ public class UIController : MonoBehaviour
             return;
         }
 
+
         BindShift();
+
         BindFocalLength();
+
         BindBaseline();
+
         BindPositionX();
+
         BindPositionY();
+
         BindPositionZ();
+
         BindPitch();
+
 
         UpdateOutputText();
     }
+
 
     private void Update()
     {
@@ -196,6 +206,7 @@ public class UIController : MonoBehaviour
         {
             return;
         }
+
 
         UpdateOutputText();
     }
@@ -210,13 +221,19 @@ public class UIController : MonoBehaviour
         BindParameter(
             shiftSlider,
             shiftInputField,
-            () => imageController.shiftPixels,
+
+            () =>
+                imageController.shiftPixels,
+
             value =>
                 imageController.shiftPixels =
                     Mathf.RoundToInt(value),
+
             shiftMin,
             shiftMax,
+
             "F0",
+
             true
         );
     }
@@ -231,10 +248,17 @@ public class UIController : MonoBehaviour
         BindParameter(
             focalLengthSlider,
             focalLengthInputField,
-            () => imageController.focalLength,
-            value => imageController.focalLength = value,
+
+            () =>
+                imageController.focalLength,
+
+            value =>
+                imageController.focalLength =
+                    value,
+
             focalLengthMin,
             focalLengthMax,
+
             "F1"
         );
     }
@@ -249,10 +273,17 @@ public class UIController : MonoBehaviour
         BindParameter(
             baselineSlider,
             baselineInputField,
-            () => imageController.baseline,
-            value => imageController.baseline = value,
+
+            () =>
+                imageController.baseline,
+
+            value =>
+                imageController.baseline =
+                    value,
+
             baselineMin,
             baselineMax,
+
             "F1"
         );
     }
@@ -267,19 +298,27 @@ public class UIController : MonoBehaviour
         BindParameter(
             positionXSlider,
             positionXInputField,
-            () => imageController.stereoCameraPosition.x,
+
+            () =>
+                imageController
+                    .stereoCameraPosition.x,
+
             value =>
             {
                 Vector3 position =
-                    imageController.stereoCameraPosition;
+                    imageController
+                        .stereoCameraPosition;
 
                 position.x = value;
 
-                imageController.stereoCameraPosition =
-                    position;
+                imageController
+                    .stereoCameraPosition =
+                        position;
             },
+
             positionXMin,
             positionXMax,
+
             "F3"
         );
     }
@@ -294,19 +333,27 @@ public class UIController : MonoBehaviour
         BindParameter(
             positionYSlider,
             positionYInputField,
-            () => imageController.stereoCameraPosition.y,
+
+            () =>
+                imageController
+                    .stereoCameraPosition.y,
+
             value =>
             {
                 Vector3 position =
-                    imageController.stereoCameraPosition;
+                    imageController
+                        .stereoCameraPosition;
 
                 position.y = value;
 
-                imageController.stereoCameraPosition =
-                    position;
+                imageController
+                    .stereoCameraPosition =
+                        position;
             },
+
             positionYMin,
             positionYMax,
+
             "F3"
         );
     }
@@ -321,19 +368,27 @@ public class UIController : MonoBehaviour
         BindParameter(
             positionZSlider,
             positionZInputField,
-            () => imageController.stereoCameraPosition.z,
+
+            () =>
+                imageController
+                    .stereoCameraPosition.z,
+
             value =>
             {
                 Vector3 position =
-                    imageController.stereoCameraPosition;
+                    imageController
+                        .stereoCameraPosition;
 
                 position.z = value;
 
-                imageController.stereoCameraPosition =
-                    position;
+                imageController
+                    .stereoCameraPosition =
+                        position;
             },
+
             positionZMin,
             positionZMax,
+
             "F3"
         );
     }
@@ -348,18 +403,26 @@ public class UIController : MonoBehaviour
         BindParameter(
             pitchSlider,
             pitchInputField,
-            () => imageController.stereoCameraRotationX,
+
+            () =>
+                imageController
+                    .stereoCameraRotationX,
+
             value =>
-                imageController.stereoCameraRotationX = value,
+                imageController
+                    .stereoCameraRotationX =
+                        value,
+
             pitchMin,
             pitchMax,
+
             "F1"
         );
     }
 
 
     // =========================================================
-    // SliderÇ∆InputFieldÇê⁄ë±Ç∑ÇÈã§í èàóù
+    // Parameter Binding
     // =========================================================
 
     private void BindParameter(
@@ -373,32 +436,57 @@ public class UIController : MonoBehaviour
         bool wholeNumbers = false
     )
     {
-        if (slider == null || inputField == null)
+        if (slider == null ||
+            inputField == null)
         {
             Debug.LogWarning(
-                "UIControllerÇ…ñ¢ê›íËÇÃSliderÇ‹ÇΩÇÕInputFieldÇ™Ç†ÇËÇ‹Ç∑ÅB",
+                "UIController„Å´Êú™Ë®≠ÂÆö„ÅÆSlider„Åæ„Åü„ÅØInputField„Åå„ÅÇ„Çä„Åæ„Åô„ÄÇ",
                 this
             );
 
             return;
         }
 
-        slider.wholeNumbers = wholeNumbers;
+
+        // =====================================================
+        // Slider / InputFieldË®≠ÂÆö
+        // =====================================================
+
+        slider.wholeNumbers =
+            wholeNumbers;
+
 
         inputField.contentType =
             wholeNumbers
-                ? TMP_InputField.ContentType.IntegerNumber
-                : TMP_InputField.ContentType.DecimalNumber;
 
-        float initialValue = getter();
+                ? TMP_InputField.ContentType
+                    .IntegerNumber
+
+                : TMP_InputField.ContentType
+                    .DecimalNumber;
+
+
+        // =====================================================
+        // ImageController„Åã„ÇâÂàùÊúüÂÄ§ÂèñÂæó
+        // =====================================================
+
+        float initialValue =
+            getter();
+
 
         if (wholeNumbers)
         {
-            initialValue = Mathf.Round(initialValue);
+            initialValue =
+                Mathf.Round(
+                    initialValue
+                );
         }
 
-        // ImageControllerÇÃèâä˙ílÇ™îÕàÕäOÇÃèÍçáÇÕÅA
-        // Controllerë§ÇïœçXÇπÇ∏SliderîÕàÕÇägí£Ç∑ÇÈÅB
+
+        // =====================================================
+        // Slider RangeË®≠ÂÆö
+        // =====================================================
+
         SetInitialSliderRange(
             slider,
             defaultMin,
@@ -407,6 +495,11 @@ public class UIController : MonoBehaviour
             wholeNumbers
         );
 
+
+        // =====================================================
+        // UI„Å∏ÂàùÊúüÂÄ§ÂèçÊò†
+        // =====================================================
+
         SynchronizeControls(
             slider,
             inputField,
@@ -414,88 +507,138 @@ public class UIController : MonoBehaviour
             format
         );
 
-        slider.onValueChanged.AddListener(value =>
-        {
-            if (isSynchronizing)
+
+        // =====================================================
+        // SliderÊìç‰Ωú
+        // =====================================================
+
+        slider.onValueChanged.AddListener(
+            value =>
             {
-                return;
-            }
+                if (isSynchronizing)
+                {
+                    return;
+                }
 
-            float newValue = value;
 
-            if (wholeNumbers)
-            {
-                newValue = Mathf.Round(newValue);
-            }
+                float newValue =
+                    value;
 
-            setter(newValue);
-
-            SynchronizeControls(
-                slider,
-                inputField,
-                newValue,
-                format
-            );
-
-            UpdateOutputText();
-        });
-
-        inputField.onEndEdit.AddListener(text =>
-        {
-            if (isSynchronizing)
-            {
-                return;
-            }
-
-            if (!TryParseFloat(text, out float inputValue))
-            {
-                float currentValue = getter();
 
                 if (wholeNumbers)
                 {
-                    currentValue = Mathf.Round(currentValue);
+                    newValue =
+                        Mathf.Round(
+                            newValue
+                        );
                 }
+
+
+                setter(
+                    newValue
+                );
+
 
                 SynchronizeControls(
                     slider,
                     inputField,
-                    currentValue,
+                    newValue,
                     format
                 );
 
-                return;
-            }
 
-            if (wholeNumbers)
+                UpdateOutputText();
+            }
+        );
+
+
+        // =====================================================
+        // InputFieldÊìç‰Ωú
+        // =====================================================
+
+        inputField.onEndEdit.AddListener(
+            text =>
             {
-                inputValue = Mathf.Round(inputValue);
+                if (isSynchronizing)
+                {
+                    return;
+                }
+
+
+                if (!TryParseFloat(
+                    text,
+                    out float inputValue
+                ))
+                {
+                    float currentValue =
+                        getter();
+
+
+                    if (wholeNumbers)
+                    {
+                        currentValue =
+                            Mathf.Round(
+                                currentValue
+                            );
+                    }
+
+
+                    SynchronizeControls(
+                        slider,
+                        inputField,
+                        currentValue,
+                        format
+                    );
+
+
+                    return;
+                }
+
+
+                if (wholeNumbers)
+                {
+                    inputValue =
+                        Mathf.Round(
+                            inputValue
+                        );
+                }
+
+
+                // =============================================
+                // InputÂÄ§„ÅåÁØÑÂõ≤Â§ñ„Å™„Çâ
+                // SliderÁØÑÂõ≤„ÇíÊã°Âºµ
+                // =============================================
+
+                ExpandSliderRange(
+                    slider,
+                    inputValue,
+                    wholeNumbers
+                );
+
+
+                setter(
+                    inputValue
+                );
+
+
+                SynchronizeControls(
+                    slider,
+                    inputField,
+                    inputValue,
+                    format
+                );
+
+
+                UpdateOutputText();
             }
-
-            // InputFieldÇ©ÇÁåªç›ÇÃîÕàÕäOÇÃílÇì¸óÕÇµÇΩèÍçáÇÕÅA
-            // SliderîÕàÕÇé©ìÆìIÇ…ägí£Ç∑ÇÈÅB
-            ExpandSliderRange(
-                slider,
-                inputValue,
-                wholeNumbers
-            );
-
-            setter(inputValue);
-
-            SynchronizeControls(
-                slider,
-                inputField,
-                inputValue,
-                format
-            );
-
-            UpdateOutputText();
-        });
+        );
     }
 
 
     // =========================================================
-    // ResetÅELoadå„Ç…ImageControllerÇÃílÇUIÇ÷çƒîΩâf
-    // ParameterPresetManagerÇ©ÇÁåƒÇ—èoÇ∑
+    // ParameterManagerÁî®
+    //
+    // Reset / LoadÂæå„Å´Âëº„Å∂
     // =========================================================
 
     public void RefreshFromController()
@@ -505,6 +648,7 @@ public class UIController : MonoBehaviour
             return;
         }
 
+
         RefreshParameter(
             shiftSlider,
             shiftInputField,
@@ -513,12 +657,14 @@ public class UIController : MonoBehaviour
             true
         );
 
+
         RefreshParameter(
             focalLengthSlider,
             focalLengthInputField,
             imageController.focalLength,
             "F1"
         );
+
 
         RefreshParameter(
             baselineSlider,
@@ -527,37 +673,50 @@ public class UIController : MonoBehaviour
             "F1"
         );
 
+
         RefreshParameter(
             positionXSlider,
             positionXInputField,
-            imageController.stereoCameraPosition.x,
+            imageController
+                .stereoCameraPosition.x,
             "F3"
         );
+
 
         RefreshParameter(
             positionYSlider,
             positionYInputField,
-            imageController.stereoCameraPosition.y,
+            imageController
+                .stereoCameraPosition.y,
             "F3"
         );
+
 
         RefreshParameter(
             positionZSlider,
             positionZInputField,
-            imageController.stereoCameraPosition.z,
+            imageController
+                .stereoCameraPosition.z,
             "F3"
         );
+
 
         RefreshParameter(
             pitchSlider,
             pitchInputField,
-            imageController.stereoCameraRotationX,
+            imageController
+                .stereoCameraRotationX,
             "F1"
         );
+
 
         UpdateOutputText();
     }
 
+
+    // =========================================================
+    // Refresh Parameter
+    // =========================================================
 
     private void RefreshParameter(
         Slider slider,
@@ -567,22 +726,28 @@ public class UIController : MonoBehaviour
         bool wholeNumbers = false
     )
     {
-        if (slider == null || inputField == null)
+        if (slider == null ||
+            inputField == null)
         {
             return;
         }
 
+
         if (wholeNumbers)
         {
-            value = Mathf.Round(value);
+            value =
+                Mathf.Round(
+                    value
+                );
         }
 
-        // ì«Ç›çûÇÒÇæílÇ™åªç›ÇÃîÕàÕäOÇ»ÇÁîÕàÕÇägí£Ç∑ÇÈÅB
+
         ExpandSliderRange(
             slider,
             value,
             wholeNumbers
         );
+
 
         SynchronizeControls(
             slider,
@@ -594,7 +759,7 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
-    // SliderÇÃèâä˙îÕàÕê›íË
+    // Initial Slider Range
     // =========================================================
 
     private static void SetInitialSliderRange(
@@ -606,40 +771,70 @@ public class UIController : MonoBehaviour
     )
     {
         float minValue =
-            Mathf.Min(defaultMin, defaultMax);
+            Mathf.Min(
+                defaultMin,
+                defaultMax
+            );
+
 
         float maxValue =
-            Mathf.Max(defaultMin, defaultMax);
+            Mathf.Max(
+                defaultMin,
+                defaultMax
+            );
+
 
         if (initialValue < minValue)
         {
-            minValue = initialValue;
+            minValue =
+                initialValue;
         }
+
 
         if (initialValue > maxValue)
         {
-            maxValue = initialValue;
+            maxValue =
+                initialValue;
         }
+
 
         if (wholeNumbers)
         {
-            minValue = Mathf.Floor(minValue);
-            maxValue = Mathf.Ceil(maxValue);
+            minValue =
+                Mathf.Floor(
+                    minValue
+                );
+
+            maxValue =
+                Mathf.Ceil(
+                    maxValue
+                );
         }
 
-        if (Mathf.Approximately(minValue, maxValue))
+
+        if (Mathf.Approximately(
+            minValue,
+            maxValue
+        ))
         {
-            minValue -= 1.0f;
-            maxValue += 1.0f;
+            minValue -=
+                1.0f;
+
+            maxValue +=
+                1.0f;
         }
 
-        slider.minValue = minValue;
-        slider.maxValue = maxValue;
+
+        slider.minValue =
+            minValue;
+
+        slider.maxValue =
+            maxValue;
     }
 
 
     // =========================================================
-    // InputFieldÇ‚LoadílÇ…âûÇ∂ÇƒSliderîÕàÕÇägí£
+    // Expand Slider Range
     // =========================================================
 
     private static void ExpandSliderRange(
@@ -648,38 +843,69 @@ public class UIController : MonoBehaviour
         bool wholeNumbers
     )
     {
-        float minValue = slider.minValue;
-        float maxValue = slider.maxValue;
+        float minValue =
+            slider.minValue;
+
+        float maxValue =
+            slider.maxValue;
+
 
         float currentRange =
-            Mathf.Max(maxValue - minValue, 1.0f);
+            Mathf.Max(
+                maxValue -
+                minValue,
+                1.0f
+            );
+
 
         float padding =
-            Mathf.Max(currentRange * 0.1f, 1.0f);
+            Mathf.Max(
+                currentRange *
+                0.1f,
+                1.0f
+            );
+
 
         if (value < minValue)
         {
-            minValue = value - padding;
+            minValue =
+                value -
+                padding;
         }
+
 
         if (value > maxValue)
         {
-            maxValue = value + padding;
+            maxValue =
+                value +
+                padding;
         }
+
 
         if (wholeNumbers)
         {
-            minValue = Mathf.Floor(minValue);
-            maxValue = Mathf.Ceil(maxValue);
+            minValue =
+                Mathf.Floor(
+                    minValue
+                );
+
+            maxValue =
+                Mathf.Ceil(
+                    maxValue
+                );
         }
 
-        slider.minValue = minValue;
-        slider.maxValue = maxValue;
+
+        slider.minValue =
+            minValue;
+
+        slider.maxValue =
+            maxValue;
     }
 
 
     // =========================================================
-    // SliderÇ∆InputFieldÇìØä˙
+    // Slider / InputField Sync
     // =========================================================
 
     private void SynchronizeControls(
@@ -689,11 +915,16 @@ public class UIController : MonoBehaviour
         string format
     )
     {
-        isSynchronizing = true;
+        isSynchronizing =
+            true;
+
 
         try
         {
-            slider.SetValueWithoutNotify(value);
+            slider.SetValueWithoutNotify(
+                value
+            );
+
 
             inputField.SetTextWithoutNotify(
                 value.ToString(
@@ -704,13 +935,14 @@ public class UIController : MonoBehaviour
         }
         finally
         {
-            isSynchronizing = false;
+            isSynchronizing =
+                false;
         }
     }
 
 
     // =========================================================
-    // InputFieldÇÃï∂éöóÒÇfloatÇ÷ïœä∑
+    // String -> Float
     // =========================================================
 
     private static bool TryParseFloat(
@@ -718,11 +950,16 @@ public class UIController : MonoBehaviour
         out float value
     )
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(
+            text
+        ))
         {
-            value = 0.0f;
+            value =
+                0.0f;
+
             return false;
         }
+
 
         if (float.TryParse(
             text,
@@ -734,8 +971,15 @@ public class UIController : MonoBehaviour
             return true;
         }
 
+
         string normalizedText =
-            text.Trim().Replace(',', '.');
+            text
+                .Trim()
+                .Replace(
+                    ',',
+                    '.'
+                );
+
 
         return float.TryParse(
             normalizedText,
@@ -747,31 +991,115 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
-    // Outputï\é¶
+    // Output
     // =========================================================
 
     private void UpdateOutputText()
     {
-        if (outputText == null || imageController == null)
+        if (outputText == null ||
+            imageController == null)
         {
             return;
         }
 
-        Vector3 position =
-            imageController.stereoCameraPosition;
 
-        outputText.text =
+        Vector3 cameraPosition =
+            imageController
+                .stereoCameraPosition;
+
+
+        // =====================================================
+        // Camera / Image Parameters
+        // =====================================================
+
+        string text =
+
             "<b>Image Parameters</b>\n" +
-            $"Shift Pixels : {imageController.shiftPixels} px\n\n" +
+
+            $"Shift Pixels : " +
+            $"{imageController.shiftPixels} px\n\n" +
+
 
             "<b>Stereo Camera Parameters</b>\n" +
-            $"Baseline : {imageController.baseline:F1} mm\n" +
-            $"Focal Length : {imageController.focalLength:F1} mm\n\n" +
+
+            $"Baseline : " +
+            $"{imageController.baseline:F1} mm\n" +
+
+            $"Focal Length : " +
+            $"{imageController.focalLength:F1} mm\n\n" +
+
 
             "<b>Stereo Camera Transform</b>\n" +
-            $"Position X : {position.x:F3}\n" +
-            $"Position Y : {position.y:F3}\n" +
-            $"Position Z : {position.z:F3}\n" +
-            $"Pitch : {imageController.stereoCameraRotationX:F1}\u00B0";
+
+            $"Position X : " +
+            $"{cameraPosition.x:F3}\n" +
+
+            $"Position Y : " +
+            $"{cameraPosition.y:F3}\n" +
+
+            $"Position Z : " +
+            $"{cameraPosition.z:F3}\n" +
+
+            $"Pitch : " +
+            $"{imageController.stereoCameraRotationX:F1}" +
+            "\u00B0\n\n";
+
+
+        // =====================================================
+        // Ball Disparity
+        // =====================================================
+
+        text +=
+            "<b>Ball Disparity</b>\n";
+
+
+        if (disparityCalculator == null)
+        {
+            text +=
+                "Calculator : Not Assigned";
+        }
+        else if (!disparityCalculator.HasBall)
+        {
+            text +=
+                "Ball : Not Active";
+        }
+        else
+        {
+            Vector3 ballPosition =
+                disparityCalculator
+                    .BallWorldPosition;
+
+
+            text +=
+
+                $"Ball X : " +
+                $"{ballPosition.x:F3}\n" +
+
+                $"Ball Y : " +
+                $"{ballPosition.y:F3}\n" +
+
+                $"Ball Z : " +
+                $"{ballPosition.z:F3}\n\n" +
+
+
+                $"Depth Z : " +
+                $"{disparityCalculator.DepthMeters:F3} m\n" +
+
+
+                $"Sensor Disparity : " +
+                $"{disparityCalculator.DisparityMm:F3} mm\n" +
+
+
+                $"Image Disparity : " +
+                $"{disparityCalculator.DisparityPixels:F2} px\n" +
+
+
+                $"After Shift : " +
+                $"{disparityCalculator.ShiftedDisparityPixels:F2} px";
+        }
+
+
+        outputText.text =
+            text;
     }
 }
