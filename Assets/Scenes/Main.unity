@@ -9690,7 +9690,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RawImage
-  m_Material: {fileID: 2100000, guid: 23d94c30674258140b490da303389854, type: 2}
+  m_Material: {fileID: 2100000, guid: d05956662695fab4498fd62998c15f89, type: 2}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -19636,7 +19636,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RawImage
-  m_Material: {fileID: 2100000, guid: 383bd81c6d854fb418ccbe2d442e925e, type: 2}
+  m_Material: {fileID: 2100000, guid: 5abf866c8f530c04493d13ae252c31a8, type: 2}
   m_Color: {r: 1, g: 1, b: 1, a: 0.5019608}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -20595,10 +20595,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ImageController
   leftMaterial: {fileID: 2100000, guid: 383bd81c6d854fb418ccbe2d442e925e, type: 2}
   rightMaterial: {fileID: 2100000, guid: 23d94c30674258140b490da303389854, type: 2}
-  leftPreviewMaterial: {fileID: 2100000, guid: 383bd81c6d854fb418ccbe2d442e925e, type: 2}
-  rightPreviewMaterial: {fileID: 2100000, guid: 23d94c30674258140b490da303389854, type: 2}
-  leftPreviewRawImage: {fileID: 1951043278}
-  rightPreviewRawImage: {fileID: 1030155978}
+  leftPreviewMaterial: {fileID: 2100000, guid: 5abf866c8f530c04493d13ae252c31a8, type: 2}
+  rightPreviewMaterial: {fileID: 2100000, guid: d05956662695fab4498fd62998c15f89, type: 2}
+  leftPreviewRawImage: {fileID: 0}
+  rightPreviewRawImage: {fileID: 0}
   shiftPixels: 0
   guardBandPixels: 500
   stereoCameraRoot: {fileID: 1481926998}

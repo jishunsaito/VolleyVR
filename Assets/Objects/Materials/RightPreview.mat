@@ -7,12 +7,13 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: LeftEye
+  m_Name: RightPreview
   m_Shader: {fileID: 4800000, guid: acbd59bfd404c244ab1fa4df816e5dd9, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
-  m_InvalidKeywords: []
+  m_InvalidKeywords:
+  - _PREVIEWMODE_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
@@ -25,7 +26,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 8400000, guid: bc4441ba8f9548e4b950ff4f6db4d8b2, type: 2}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
@@ -102,11 +103,9 @@ Material:
     - _GlossyReflections: 0
     - _GuardBandPixels: 500
     - _Metallic: 0
-    - _MirrorHorizontal: 0
-    - _MirrorX: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.005
-    - _PreviewMode: 0
+    - _PreviewMode: 1
     - _QueueOffset: 0
     - _ReceiveShadows: 1
     - _ShiftPixels: 0
@@ -120,7 +119,6 @@ Material:
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1
     m_Colors:
-    - _BackgroundColor: {r: 0.29999998, g: 0.68, b: 0.72, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
@@ -128,7 +126,7 @@ Material:
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
---- !u!114 &2895670265605107993
+--- !u!114 &4291836592963940758
 MonoBehaviour:
   m_ObjectHideFlags: 11
   m_CorrespondingSourceObject: {fileID: 0}

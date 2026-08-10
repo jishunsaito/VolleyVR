@@ -48,9 +48,7 @@ public class ImageController : MonoBehaviour
 
     [Header("Image Shift")]
 
-    [Tooltip(
-        "左右画像を逆方向にシフトする量[pixel]"
-    )]
+    [Tooltip("左右画像を逆方向にシフトする量[pixel]")]
     public int shiftPixels = 0;
 
 
@@ -182,11 +180,22 @@ public class ImageController : MonoBehaviour
 
     private void Start()
     {
+        /*
+         * 既存の映像出力経路は変更しない。
+         *
+         * 1. Guard Band RenderTexture生成
+         * 2. MaterialへTexture設定
+         * 3. Main / Preview Mode設定
+         * 4. 各パラメータ反映
+         */
+
         CreateGuardBandRenderTextures();
 
         ApplyTexturesToMaterials();
 
-        ApplyMaterialModes();
+        //ApplyMaterialModes();
+
+        ValidateMaterials();
 
         ApplyAllParameters();
     }
@@ -194,6 +203,19 @@ public class ImageController : MonoBehaviour
 
     private void Update()
     {
+        /*
+         * Main DisplayとPreviewのModeを
+         * 毎フレーム明示する。
+         *
+         * Main:
+         * _PreviewMode = 0
+         *
+         * Preview:
+         * _PreviewMode = 1
+         */
+
+        //ApplyMaterialModes();
+
         ApplyImageShift();
 
         ApplyBaseline();
@@ -226,6 +248,7 @@ public class ImageController : MonoBehaviour
             originalLeftSensorSize =
                 leftCamera.sensorSize;
         }
+
 
         if (rightCamera != null)
         {
@@ -291,8 +314,11 @@ public class ImageController : MonoBehaviour
             );
 
 
-        // Cameraの出力先を
-        // Guard Band付きRenderTextureへ変更
+        /*
+         * Cameraの出力先を
+         * Guard Band付きRenderTextureへ変更。
+         */
+
         leftCamera.targetTexture =
             leftGuardTexture;
 
@@ -301,7 +327,7 @@ public class ImageController : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // CameraのSensor Widthを拡張
+        // Camera Sensor Width
         // -----------------------------------------------------
 
         ApplyGuardBandSensorSize();
@@ -317,18 +343,20 @@ public class ImageController : MonoBehaviour
             source.descriptor;
 
 
-        // 元の表示幅
         int visibleWidth =
             source.width;
 
 
-        // 左右Guard Bandを追加
+        /*
+         * 元の画面幅の左右に
+         * guardBandPixelsを追加する。
+         */
+
         descriptor.width =
             visibleWidth +
             guardBandPixels * 2;
 
 
-        // 高さは変更しない
         descriptor.height =
             source.height;
 
@@ -454,7 +482,7 @@ public class ImageController : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // Preview Material
+        // Preview Materials
         // -----------------------------------------------------
 
         if (leftPreviewMaterial != null &&
@@ -478,7 +506,10 @@ public class ImageController : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // RawImage
+        // Preview RawImages
+        //
+        // ここは映像が正常に映っていた元コードのまま。
+        // Materialの付け替えなどは行わない。
         // -----------------------------------------------------
 
         if (leftPreviewRawImage != null &&
@@ -505,13 +536,20 @@ public class ImageController : MonoBehaviour
     private void ApplyMaterialModes()
     {
         /*
+         * =====================================================
          * Main Display
+         * =====================================================
          *
          * PreviewMode = 0
          *
-         * Shader側で水平反転。
-         * Wheatstoneの鏡を通したとき
-         * 正しい向きになる。
+         * Shader側で水平方向を反転。
+         *
+         * Unity上でMain Displayを直接見ると
+         * 鏡像になっている状態。
+         *
+         * Wheatstoneでは、この画像を
+         * 実際のHalf Mirrorでもう一度反転して見るため、
+         * 観察者からは元の正常な向きに見える。
          */
 
         SetMaterialMode(
@@ -526,12 +564,13 @@ public class ImageController : MonoBehaviour
 
 
         /*
+         * =====================================================
          * UI Preview
+         * =====================================================
          *
          * PreviewMode = 1
          *
-         * 水平反転しない。
-         * RawImageのAlphaも使用する。
+         * Shader側では水平反転しない。
          */
 
         SetMaterialMode(
@@ -565,10 +604,65 @@ public class ImageController : MonoBehaviour
         );
 
 
-        material.SetFloat(
+        /*
+         * Guard Bandは整数。
+         */
+
+        material.SetInt(
             GuardBandPixelsProperty,
             guardBandPixels
         );
+    }
+
+
+    // =========================================================
+    // Material Validation
+    // =========================================================
+
+    private void ValidateMaterials()
+    {
+        /*
+         * MainとPreviewで同じMaterialを使うと、
+         *
+         * Main
+         * _PreviewMode = 0
+         *
+         * の後に、
+         *
+         * Preview
+         * _PreviewMode = 1
+         *
+         * が同じMaterialへ書き込まれる。
+         *
+         * その場合、MainもPreview Modeになって
+         * 水平反転しなくなる。
+         */
+
+
+        if (leftMaterial != null &&
+            leftPreviewMaterial != null &&
+            leftMaterial == leftPreviewMaterial)
+        {
+            Debug.LogError(
+                "Left Material と Left Preview Material に" +
+                "同じMaterialが設定されています。\n" +
+                "Main用とPreview用は別Materialにしてください。",
+                this
+            );
+        }
+
+
+        if (rightMaterial != null &&
+            rightPreviewMaterial != null &&
+            rightMaterial == rightPreviewMaterial)
+        {
+            Debug.LogError(
+                "Right Material と Right Preview Material に" +
+                "同じMaterialが設定されています。\n" +
+                "Main用とPreview用は別Materialにしてください。",
+                this
+            );
+        }
     }
 
 
@@ -579,14 +673,34 @@ public class ImageController : MonoBehaviour
     private void ApplyImageShift()
     {
         /*
-         * 論理上のShift方向は
-         * PreviewとMain Displayで同じ。
+         * shiftPixels は int。
          *
-         * Main DisplayはShader側で
-         * 事前にMirrorしているので、
-         * Wheatstoneの物理Mirrorを通した後に
-         * Previewと同じ方向に見える。
+         * 例:
+         *
+         * shiftPixels = 100
+         *
+         * Left
+         * +100 px
+         *
+         * Right
+         * -100 px
+         *
+         *
+         * PreviewとMainで与える論理Shift値は同じ。
+         *
+         * Main DisplayではShader側で
+         * 水平座標そのものを反転するので、
+         * Displayを直接見た場合のShift方向も
+         * Previewに対して鏡映しになる。
+         *
+         * それをHalf Mirrorで見ることで
+         * 最終的にはPreviewと同じ方向になる。
          */
+
+
+        // -----------------------------------------------------
+        // Main Display
+        // -----------------------------------------------------
 
         ApplyShiftToMaterial(
             leftMaterial,
@@ -598,6 +712,10 @@ public class ImageController : MonoBehaviour
             -shiftPixels
         );
 
+
+        // -----------------------------------------------------
+        // Preview
+        // -----------------------------------------------------
 
         ApplyShiftToMaterial(
             leftPreviewMaterial,
@@ -613,7 +731,7 @@ public class ImageController : MonoBehaviour
 
     private void ApplyShiftToMaterial(
         Material material,
-        float shift
+        int shift
     )
     {
         if (material == null)
@@ -622,13 +740,17 @@ public class ImageController : MonoBehaviour
         }
 
 
-        material.SetFloat(
+        /*
+         * shiftはintのままShaderへ送る。
+         */
+
+        material.SetInt(
             ShiftPixelsProperty,
             shift
         );
 
 
-        material.SetFloat(
+        material.SetInt(
             GuardBandPixelsProperty,
             guardBandPixels
         );
@@ -648,20 +770,34 @@ public class ImageController : MonoBehaviour
         }
 
 
+        /*
+         * baselineはmm。
+         *
+         * Unityでは
+         * 1 Unit = 1 m
+         *
+         * として0.001倍。
+         */
+
         float halfBaseline =
             baseline *
             0.5f *
             0.001f;
 
 
+        // -----------------------------------------------------
         // Left
+        // -----------------------------------------------------
+
         Vector3 leftPosition =
             leftCamera
                 .transform
                 .localPosition;
 
+
         leftPosition.x =
             -halfBaseline;
+
 
         leftCamera
             .transform
@@ -669,14 +805,19 @@ public class ImageController : MonoBehaviour
                 leftPosition;
 
 
+        // -----------------------------------------------------
         // Right
+        // -----------------------------------------------------
+
         Vector3 rightPosition =
             rightCamera
                 .transform
                 .localPosition;
 
+
         rightPosition.x =
             halfBaseline;
+
 
         rightCamera
             .transform
@@ -713,8 +854,9 @@ public class ImageController : MonoBehaviour
 
         /*
          * 焦点距離を変更しても
-         * Guard Band用Sensor Widthは維持。
+         * Guard Band用Sensor Widthを維持。
          */
+
         ApplyGuardBandSensorSize();
     }
 
@@ -755,6 +897,8 @@ public class ImageController : MonoBehaviour
 
     private void ApplyAllParameters()
     {
+        //ApplyMaterialModes();
+
         ApplyImageShift();
 
         ApplyBaseline();
