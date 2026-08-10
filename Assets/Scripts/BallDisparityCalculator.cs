@@ -34,6 +34,32 @@ public class BallDisparityCalculator : MonoBehaviour
 
 
     // =========================================================
+    // Pole Targets
+    // =========================================================
+
+    [Header("Pole Targets")]
+
+    [Tooltip("手前側ポールの視差を計算する基準点。ポール本体または任意位置に置いたEmptyを指定")]
+    [SerializeField]
+    private Transform nearPoleTarget;
+
+    [Tooltip("奥側ポールの視差を計算する基準点。ポール本体または任意位置に置いたEmptyを指定")]
+    [SerializeField]
+    private Transform farPoleTarget;
+
+
+    // =========================================================
+    // Net Center Target
+    // =========================================================
+
+    [Header("Net Center Target")]
+
+    [Tooltip("ネット中心の視差を計算する基準点。ネット中央に置いたEmptyなどを指定")]
+    [SerializeField]
+    private Transform netCenterTarget;
+
+
+    // =========================================================
     // Unit
     // =========================================================
 
@@ -60,61 +86,138 @@ public class BallDisparityCalculator : MonoBehaviour
 
 
     // =========================================================
-    // Result
+    // Internal Result Type
     // =========================================================
 
-    /// <summary>
-    /// 現在、有効なBallを取得できているか
-    /// </summary>
-    public bool HasBall { get; private set; }
+    private struct TargetDisparityResult
+    {
+        public bool isValid;
+        public Vector3 worldPosition;
+        public float depthMeters;
+        public float depthMm;
+        public float disparityMm;
+        public float disparityPixels;
+        public float shiftedDisparityPixels;
+        public float disparityAngleDeg;
+        public float shiftedDisparityAngleDeg;
+    }
 
-    /// <summary>
-    /// 現在の状態
-    /// </summary>
+    private TargetDisparityResult ballResult;
+    private TargetDisparityResult nearPoleResult;
+    private TargetDisparityResult farPoleResult;
+    private TargetDisparityResult netCenterResult;
+
+
+    // =========================================================
+    // Ball Result
+    // =========================================================
+
+    public bool HasBall => ballResult.isValid;
+
     public string StatusMessage { get; private set; } = "Ball : Not Found";
 
-    /// <summary>
-    /// BallのWorld Position
-    /// </summary>
-    public Vector3 BallWorldPosition { get; private set; }
+    public Vector3 BallWorldPosition => ballResult.worldPosition;
 
-    /// <summary>
-    /// カメラ光軸方向の奥行き [m]
-    /// </summary>
-    public float DepthMeters { get; private set; }
+    public float DepthMeters => ballResult.depthMeters;
 
-    /// <summary>
-    /// カメラ光軸方向の奥行き [mm]
-    /// </summary>
-    public float DepthMm { get; private set; }
+    public float DepthMm => ballResult.depthMm;
 
-    /// <summary>
-    /// センサー面上の幾何学的視差 [mm]
-    /// d = fB/Z
-    /// </summary>
-    public float DisparityMm { get; private set; }
+    public float DisparityMm => ballResult.disparityMm;
 
-    /// <summary>
-    /// 画像上の幾何学的視差 [pixel]
-    /// </summary>
-    public float DisparityPixels { get; private set; }
+    public float DisparityPixels => ballResult.disparityPixels;
 
-    /// <summary>
-    /// Horizontal Shift適用後の視差 [pixel]
-    /// </summary>
-    public float ShiftedDisparityPixels { get; private set; }
+    public float ShiftedDisparityPixels => ballResult.shiftedDisparityPixels;
 
-    /// <summary>
-    /// Shift前の視差角 [deg]
-    /// 画面中央注視時を0 degとした相対視差角
-    /// </summary>
-    public float DisparityAngleDeg { get; private set; }
+    public float DisparityAngleDeg => ballResult.disparityAngleDeg;
 
-    /// <summary>
-    /// Shift後の視差角 [deg]
-    /// 画面中央注視時を0 degとした相対視差角
-    /// </summary>
-    public float ShiftedDisparityAngleDeg { get; private set; }
+    public float ShiftedDisparityAngleDeg => ballResult.shiftedDisparityAngleDeg;
+
+
+    // =========================================================
+    // Near Pole Result
+    // =========================================================
+
+    public bool HasNearPole => nearPoleResult.isValid;
+
+    public string NearPoleStatusMessage { get; private set; } =
+        "Near Pole : Not Assigned";
+
+    public Vector3 NearPoleWorldPosition => nearPoleResult.worldPosition;
+
+    public float NearPoleDepthMeters => nearPoleResult.depthMeters;
+
+    public float NearPoleDepthMm => nearPoleResult.depthMm;
+
+    public float NearPoleDisparityMm => nearPoleResult.disparityMm;
+
+    public float NearPoleDisparityPixels => nearPoleResult.disparityPixels;
+
+    public float NearPoleShiftedDisparityPixels =>
+        nearPoleResult.shiftedDisparityPixels;
+
+    public float NearPoleDisparityAngleDeg =>
+        nearPoleResult.disparityAngleDeg;
+
+    public float NearPoleShiftedDisparityAngleDeg =>
+        nearPoleResult.shiftedDisparityAngleDeg;
+
+
+    // =========================================================
+    // Far Pole Result
+    // =========================================================
+
+    public bool HasFarPole => farPoleResult.isValid;
+
+    public string FarPoleStatusMessage { get; private set; } =
+        "Far Pole : Not Assigned";
+
+    public Vector3 FarPoleWorldPosition => farPoleResult.worldPosition;
+
+    public float FarPoleDepthMeters => farPoleResult.depthMeters;
+
+    public float FarPoleDepthMm => farPoleResult.depthMm;
+
+    public float FarPoleDisparityMm => farPoleResult.disparityMm;
+
+    public float FarPoleDisparityPixels => farPoleResult.disparityPixels;
+
+    public float FarPoleShiftedDisparityPixels =>
+        farPoleResult.shiftedDisparityPixels;
+
+    public float FarPoleDisparityAngleDeg =>
+        farPoleResult.disparityAngleDeg;
+
+    public float FarPoleShiftedDisparityAngleDeg =>
+        farPoleResult.shiftedDisparityAngleDeg;
+
+
+    // =========================================================
+    // Net Center Result
+    // =========================================================
+
+    public bool HasNetCenter => netCenterResult.isValid;
+
+    public string NetCenterStatusMessage { get; private set; } =
+        "Net Center : Not Assigned";
+
+    public Vector3 NetCenterWorldPosition => netCenterResult.worldPosition;
+
+    public float NetCenterDepthMeters => netCenterResult.depthMeters;
+
+    public float NetCenterDepthMm => netCenterResult.depthMm;
+
+    public float NetCenterDisparityMm => netCenterResult.disparityMm;
+
+    public float NetCenterDisparityPixels => netCenterResult.disparityPixels;
+
+    public float NetCenterShiftedDisparityPixels =>
+        netCenterResult.shiftedDisparityPixels;
+
+    public float NetCenterDisparityAngleDeg =>
+        netCenterResult.disparityAngleDeg;
+
+    public float NetCenterShiftedDisparityAngleDeg =>
+        netCenterResult.shiftedDisparityAngleDeg;
 
 
     // =========================================================
@@ -124,7 +227,7 @@ public class BallDisparityCalculator : MonoBehaviour
     private void Update()
     {
         FindBallIfNeeded();
-        CalculateDisparity();
+        CalculateAllDisparities();
     }
 
 
@@ -134,120 +237,207 @@ public class BallDisparityCalculator : MonoBehaviour
 
     private void FindBallIfNeeded()
     {
-        // 以前取得したBallがまだ存在し、Activeならそのまま使用
         if (ballTransform != null &&
             ballTransform.gameObject.activeInHierarchy)
         {
             return;
         }
 
-        // Destroy / InactiveになったBall参照を破棄
         ballTransform = null;
-
-        GameObject ballObject = null;
 
         try
         {
-            ballObject =
+            GameObject ballObject =
                 GameObject.FindGameObjectWithTag(ballTag);
+
+            if (ballObject != null)
+            {
+                ballTransform = ballObject.transform;
+            }
         }
         catch (UnityException)
         {
-            HasBall = false;
-            StatusMessage = $"Tag '{ballTag}' : Not Registered";
-            return;
-        }
-
-        if (ballObject != null)
-        {
-            ballTransform = ballObject.transform;
+            StatusMessage =
+                $"Tag '{ballTag}' : Not Registered";
         }
     }
 
 
     // =========================================================
-    // Disparity Calculation
+    // Calculate All Targets
     // =========================================================
 
-    private void CalculateDisparity()
+    private void CalculateAllDisparities()
     {
-        // -----------------------------------------------------
-        // Reference check
-        // -----------------------------------------------------
-
+        // 共通参照が未設定なら全対象を無効化
         if (imageController == null)
         {
-            HasBall = false;
+            ballResult = default;
+            nearPoleResult = default;
+            farPoleResult = default;
+            netCenterResult = default;
+
             StatusMessage = "ImageController : Not Assigned";
+            NearPoleStatusMessage = "ImageController : Not Assigned";
+            FarPoleStatusMessage = "ImageController : Not Assigned";
+            NetCenterStatusMessage = "ImageController : Not Assigned";
             return;
         }
 
         if (stereoCameraRoot == null)
         {
-            HasBall = false;
+            ballResult = default;
+            nearPoleResult = default;
+            farPoleResult = default;
+            netCenterResult = default;
+
             StatusMessage = "Stereo Camera Root : Not Assigned";
+            NearPoleStatusMessage = "Stereo Camera Root : Not Assigned";
+            FarPoleStatusMessage = "Stereo Camera Root : Not Assigned";
+            NetCenterStatusMessage = "Stereo Camera Root : Not Assigned";
             return;
         }
 
         if (referenceCamera == null)
         {
-            HasBall = false;
+            ballResult = default;
+            nearPoleResult = default;
+            farPoleResult = default;
+            netCenterResult = default;
+
             StatusMessage = "Reference Camera : Not Assigned";
+            NearPoleStatusMessage = "Reference Camera : Not Assigned";
+            FarPoleStatusMessage = "Reference Camera : Not Assigned";
+            NetCenterStatusMessage = "Reference Camera : Not Assigned";
             return;
         }
 
-        if (ballTransform == null)
+
+        // -----------------------------------------------------
+        // Ball
+        // -----------------------------------------------------
+
+        ballResult =
+            CalculateTargetDisparity(
+                ballTransform,
+                out string ballStatus
+            );
+
+        StatusMessage =
+            ballTransform == null
+                ? "Ball : Not Found"
+                : ballStatus;
+
+
+        // -----------------------------------------------------
+        // Near Pole
+        // -----------------------------------------------------
+
+        nearPoleResult =
+            CalculateTargetDisparity(
+                nearPoleTarget,
+                out string nearPoleStatus
+            );
+
+        NearPoleStatusMessage =
+            nearPoleTarget == null
+                ? "Near Pole : Not Assigned"
+                : nearPoleStatus;
+
+
+        // -----------------------------------------------------
+        // Far Pole
+        // -----------------------------------------------------
+
+        farPoleResult =
+            CalculateTargetDisparity(
+                farPoleTarget,
+                out string farPoleStatus
+            );
+
+        FarPoleStatusMessage =
+            farPoleTarget == null
+                ? "Far Pole : Not Assigned"
+                : farPoleStatus;
+
+
+        // -----------------------------------------------------
+        // Net Center
+        // -----------------------------------------------------
+
+        netCenterResult =
+            CalculateTargetDisparity(
+                netCenterTarget,
+                out string netCenterStatus
+            );
+
+        NetCenterStatusMessage =
+            netCenterTarget == null
+                ? "Net Center : Not Assigned"
+                : netCenterStatus;
+    }
+
+
+    // =========================================================
+    // Disparity Calculation for One Target
+    // =========================================================
+
+    private TargetDisparityResult CalculateTargetDisparity(
+        Transform target,
+        out string statusMessage
+    )
+    {
+        TargetDisparityResult result = default;
+
+        if (target == null)
         {
-            HasBall = false;
-            StatusMessage = "Ball : Not Found";
-            return;
+            statusMessage = "Target : Not Assigned";
+            return result;
         }
 
-        if (!ballTransform.gameObject.activeInHierarchy)
+        if (!target.gameObject.activeInHierarchy)
         {
-            HasBall = false;
-            StatusMessage = "Ball : Inactive";
-            return;
+            statusMessage = "Target : Inactive";
+            return result;
         }
 
 
         // =====================================================
-        // Ball Position
+        // Target Position
         // =====================================================
 
-        BallWorldPosition =
-            ballTransform.position;
+        result.worldPosition =
+            target.position;
 
 
         // =====================================================
-        // Camera -> Ball Vector
+        // Camera -> Target Vector
         // =====================================================
 
-        Vector3 cameraToBall =
-            BallWorldPosition -
+        Vector3 cameraToTarget =
+            result.worldPosition -
             stereoCameraRoot.position;
 
 
         // =====================================================
         // 奥行き Z
         //
-        // カメラからBallまでの直線距離ではなく、
+        // カメラから対象までの直線距離ではなく、
         // カメラ光軸方向への射影距離。
         //
-        // Z = dot(CameraToBall, CameraForward)
+        // Z = dot(CameraToTarget, CameraForward)
         // =====================================================
 
         float depthUnity =
             Vector3.Dot(
-                cameraToBall,
+                cameraToTarget,
                 referenceCamera.transform.forward
             );
 
         if (depthUnity <= 0.0f)
         {
-            HasBall = false;
-            StatusMessage = "Ball : Behind Camera";
-            return;
+            statusMessage = "Target : Behind Camera";
+            return result;
         }
 
 
@@ -255,10 +445,10 @@ public class BallDisparityCalculator : MonoBehaviour
         // Unit Conversion
         // =====================================================
 
-        DepthMeters =
+        result.depthMeters =
             depthUnity;
 
-        DepthMm =
+        result.depthMm =
             depthUnity *
             unityUnitToMm;
 
@@ -273,13 +463,12 @@ public class BallDisparityCalculator : MonoBehaviour
         float baselineMm =
             imageController.baseline;
 
-        if (DepthMm <= 0.0f ||
+        if (result.depthMm <= 0.0f ||
             focalLengthMm <= 0.0f ||
             baselineMm < 0.0f)
         {
-            HasBall = false;
-            StatusMessage = "Invalid Camera Parameters";
-            return;
+            statusMessage = "Invalid Camera Parameters";
+            return result;
         }
 
 
@@ -289,10 +478,10 @@ public class BallDisparityCalculator : MonoBehaviour
         // d = fB / Z
         // =====================================================
 
-        DisparityMm =
+        result.disparityMm =
             focalLengthMm *
             baselineMm /
-            DepthMm;
+            result.depthMm;
 
 
         // =====================================================
@@ -300,8 +489,7 @@ public class BallDisparityCalculator : MonoBehaviour
         //
         // Projection Matrixから水平方向焦点距離[pixel]を取得。
         //
-        // x_ndc = m00 * X/Z
-        // f_px = width/2 * m00
+        // f_px = width/2 * |m00|
         // d_px = f_px * B/Z
         // =====================================================
 
@@ -325,10 +513,10 @@ public class BallDisparityCalculator : MonoBehaviour
                 referenceCamera.projectionMatrix.m00
             );
 
-        DisparityPixels =
+        result.disparityPixels =
             focalLengthPixels *
             baselineMm /
-            DepthMm;
+            result.depthMm;
 
 
         // =====================================================
@@ -336,37 +524,34 @@ public class BallDisparityCalculator : MonoBehaviour
         //
         // Left  = +shiftPixels
         // Right = -shiftPixels
-        //
         // 左右の相対変化量は 2 * shiftPixels
         // =====================================================
 
-        ShiftedDisparityPixels =
-            DisparityPixels -
+        result.shiftedDisparityPixels =
+            result.disparityPixels -
             2.0f *
             imageController.shiftPixels;
 
 
         // =====================================================
         // Disparity Angle [deg]
-        //
-        // 視距離 936 mm
-        // IPD 63 mm
-        // 観察者は画面中心に固定
         // =====================================================
 
-        DisparityAngleDeg =
+        result.disparityAngleDeg =
             DispPxToAngleDeg(
-                DisparityPixels
+                result.disparityPixels
             );
 
-        ShiftedDisparityAngleDeg =
+        result.shiftedDisparityAngleDeg =
             DispPxToAngleDeg(
-                ShiftedDisparityPixels
+                result.shiftedDisparityPixels
             );
 
 
-        HasBall = true;
-        StatusMessage = "OK";
+        result.isValid = true;
+        statusMessage = "OK";
+
+        return result;
     }
 
 
@@ -378,24 +563,16 @@ public class BallDisparityCalculator : MonoBehaviour
         float disparityPixels
     )
     {
-        // -----------------------------------------------------
         // Pixel disparity -> Display上の物理距離 [mm]
-        // -----------------------------------------------------
-
         float disparityMm =
             disparityPixels *
             displayPixelPitchMm;
 
 
-        // -----------------------------------------------------
-        // Display座標系
-        //
         // Display center = (0, 0, 0)
         // Viewer center  = (0, 0, -936)
-        //
         // Left Eye  = (-IPD/2, 0, -936)
         // Right Eye = (+IPD/2, 0, -936)
-        // -----------------------------------------------------
 
         Vector3 leftEye =
             new Vector3(
@@ -412,12 +589,7 @@ public class BallDisparityCalculator : MonoBehaviour
             );
 
 
-        // -----------------------------------------------------
         // 左右画像上の対応点
-        //
-        // 画面中心を基準に左右へ disparity/2 ずつ配置
-        // -----------------------------------------------------
-
         Vector3 leftPoint =
             new Vector3(
                 disparityMm * 0.5f,
@@ -436,10 +608,7 @@ public class BallDisparityCalculator : MonoBehaviour
             Vector3.zero;
 
 
-        // -----------------------------------------------------
         // 視差ありの場合の左右視線
-        // -----------------------------------------------------
-
         Vector3 leftRayWithDisparity =
             leftPoint -
             leftEye;
@@ -449,10 +618,7 @@ public class BallDisparityCalculator : MonoBehaviour
             rightEye;
 
 
-        // -----------------------------------------------------
         // 視差0の場合の左右視線
-        // -----------------------------------------------------
-
         Vector3 leftRayZeroDisparity =
             midPoint -
             leftEye;
@@ -462,14 +628,9 @@ public class BallDisparityCalculator : MonoBehaviour
             rightEye;
 
 
-        // -----------------------------------------------------
-        // 元の式と同じ考え方
-        //
         // alpha : 視差ありの輻輳角
         // beta  : 画面中心を見るときの輻輳角
-        //
         // disparity angle = alpha - beta
-        // -----------------------------------------------------
 
         float alpha =
             Vector3.Angle(

@@ -1046,22 +1046,36 @@ public class UIController : MonoBehaviour
 
 
         // =====================================================
-        // Ball Disparity
+        // Disparity Information
         // =====================================================
 
         text +=
-            "<b>Ball Disparity</b>\n";
+            "<b>Disparity Information</b>\n\n";
 
 
         if (disparityCalculator == null)
         {
             text +=
                 "Calculator : Not Assigned";
+
+            outputText.text =
+                text;
+
+            return;
         }
-        else if (!disparityCalculator.HasBall)
+
+
+        // =====================================================
+        // Ball
+        // =====================================================
+
+        text +=
+            "<b>Ball</b>\n";
+
+        if (!disparityCalculator.HasBall)
         {
             text +=
-                "Ball : Not Active";
+                "Ball : Not Active\n\n";
         }
         else
         {
@@ -1069,26 +1083,13 @@ public class UIController : MonoBehaviour
                 disparityCalculator
                     .BallWorldPosition;
 
-
             text +=
-
-                $"Ball X : " +
-                $"{ballPosition.x:F3}\n" +
-
-                $"Ball Y : " +
-                $"{ballPosition.y:F3}\n" +
-
-                $"Ball Z : " +
-                $"{ballPosition.z:F3}\n\n" +
-
+                $"X : {ballPosition.x:F3}\n" +
+                $"Y : {ballPosition.y:F3}\n" +
+                $"Z : {ballPosition.z:F3}\n\n" +
 
                 $"Depth Z : " +
                 $"{disparityCalculator.DepthMeters:F3} m\n" +
-
-
-                $"Sensor Disparity : " +
-                $"{disparityCalculator.DisparityMm:F3} mm\n" +
-
 
                 $"Image Disparity : " +
                 $"{disparityCalculator.DisparityPixels:F2} px\n" +
@@ -1096,12 +1097,120 @@ public class UIController : MonoBehaviour
                 $"Disparity Angle : " +
                 $"{disparityCalculator.DisparityAngleDeg:F3}°\n" +
 
-
                 $"After Shift : " +
                 $"{disparityCalculator.ShiftedDisparityPixels:F2} px\n" +
 
                 $"After Shift Angle : " +
-                $"{disparityCalculator.ShiftedDisparityAngleDeg:F3}°";
+                $"{disparityCalculator.ShiftedDisparityAngleDeg:F3}°\n\n";
+        }
+
+
+        // =====================================================
+        // Near Pole
+        // =====================================================
+
+        text +=
+            "<b>Near Pole (Front)</b>\n";
+
+        if (!disparityCalculator.HasNearPole)
+        {
+            text +=
+                $"{disparityCalculator.NearPoleStatusMessage}\n\n";
+        }
+        else
+        {
+            Vector3 nearPolePosition =
+                disparityCalculator
+                    .NearPoleWorldPosition;
+
+            text +=
+
+                $"Depth Z : " +
+                $"{disparityCalculator.NearPoleDepthMeters:F3} m\n" +
+
+                $"Image Disparity : " +
+                $"{disparityCalculator.NearPoleDisparityPixels:F2} px\n" +
+
+                $"Disparity Angle : " +
+                $"{disparityCalculator.NearPoleDisparityAngleDeg:F3}°\n" +
+
+                $"After Shift : " +
+                $"{disparityCalculator.NearPoleShiftedDisparityPixels:F2} px\n" +
+
+                $"After Shift Angle : " +
+                $"{disparityCalculator.NearPoleShiftedDisparityAngleDeg:F3}°\n\n";
+        }
+
+
+        // =====================================================
+        // Far Pole
+        // =====================================================
+
+        text +=
+            "<b>Far Pole (Back)</b>\n";
+
+        if (!disparityCalculator.HasFarPole)
+        {
+            text +=
+                $"{disparityCalculator.FarPoleStatusMessage}\n\n";
+        }
+        else
+        {
+            Vector3 farPolePosition =
+                disparityCalculator
+                    .FarPoleWorldPosition;
+
+            text +=
+                $"Depth Z : " +
+                $"{disparityCalculator.FarPoleDepthMeters:F3} m\n" +
+
+                $"Image Disparity : " +
+                $"{disparityCalculator.FarPoleDisparityPixels:F2} px\n" +
+
+                $"Disparity Angle : " +
+                $"{disparityCalculator.FarPoleDisparityAngleDeg:F3}°\n" +
+
+                $"After Shift : " +
+                $"{disparityCalculator.FarPoleShiftedDisparityPixels:F2} px\n" +
+
+                $"After Shift Angle : " +
+                $"{disparityCalculator.FarPoleShiftedDisparityAngleDeg:F3}°\n\n";
+        }
+
+
+        // =====================================================
+        // Net Center
+        // =====================================================
+
+        text +=
+            "<b>Net Center</b>\n";
+
+        if (!disparityCalculator.HasNetCenter)
+        {
+            text +=
+                disparityCalculator.NetCenterStatusMessage;
+        }
+        else
+        {
+            Vector3 netCenterPosition =
+                disparityCalculator
+                    .NetCenterWorldPosition;
+
+            text +=
+                $"Depth Z : " +
+                $"{disparityCalculator.NetCenterDepthMeters:F3} m\n" +
+
+                $"Image Disparity : " +
+                $"{disparityCalculator.NetCenterDisparityPixels:F2} px\n" +
+
+                $"Disparity Angle : " +
+                $"{disparityCalculator.NetCenterDisparityAngleDeg:F3}°\n" +
+
+                $"After Shift : " +
+                $"{disparityCalculator.NetCenterShiftedDisparityPixels:F2} px\n" +
+
+                $"After Shift Angle : " +
+                $"{disparityCalculator.NetCenterShiftedDisparityAngleDeg:F3}°";
         }
 
 

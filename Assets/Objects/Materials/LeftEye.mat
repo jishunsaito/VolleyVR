@@ -104,12 +104,13 @@ Material:
     - _GuardBandPixels: 500
     - _Metallic: 0
     - _MirrorHorizontal: 0
+    - _MirrorX: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.005
     - _PreviewMode: 1
     - _QueueOffset: 0
     - _ReceiveShadows: 1
-    - _ShiftPixels: 117
+    - _ShiftPixels: 0
     - _Smoothness: 0.5
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1

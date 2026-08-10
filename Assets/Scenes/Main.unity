@@ -15145,6 +15145,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2476998312208485809, guid: 9fa00166af93ed64898d0421e5776b3f, type: 3}
   m_PrefabInstance: {fileID: 1500502786}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &1505889213 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5964723980317172444, guid: 0677a557bdbfd7549b58eb6574b2803f, type: 3}
+  m_PrefabInstance: {fileID: 8031961771635472790}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1512320193
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -16526,6 +16531,11 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1595623973}
   m_CullTransparentMesh: 1
+--- !u!4 &1595700428 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5964723980317172444, guid: 0677a557bdbfd7549b58eb6574b2803f, type: 3}
+  m_PrefabInstance: {fileID: 516192425}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1598989182
 GameObject:
   m_ObjectHideFlags: 0
@@ -19276,6 +19286,9 @@ MonoBehaviour:
   stereoCameraRoot: {fileID: 1481926998}
   referenceCamera: {fileID: 1085836688}
   ballTag: Ball
+  nearPoleTarget: {fileID: 1595700428}
+  farPoleTarget: {fileID: 1505889213}
+  netCenterTarget: {fileID: 1377683631}
   unityUnitToMm: 1000
   displayPixelPitchMm: 0.1845236
 --- !u!4 &1910387836
