@@ -143,14 +143,14 @@ public class UIController : MonoBehaviour
     private float baselineMin = 0.0f;
     private float baselineMax = 5000.0f;
 
-    private float positionXMin = -100.0f;
-    private float positionXMax = 100.0f;
+    private float positionXMin = -50.0f;
+    private float positionXMax = 50.0f;
 
-    private float positionYMin = -200.0f;
-    private float positionYMax = 200.0f;
+    private float positionYMin = 0.0f;
+    private float positionYMax = 100.0f;
 
     private float positionZMin = -300.0f;
-    private float positionZMax = 100.0f;
+    private float positionZMax = 0.0f;
 
     private float pitchMin = -60.0f;
     private float pitchMax = 60.0f;
