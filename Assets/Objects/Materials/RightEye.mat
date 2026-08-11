@@ -45,7 +45,7 @@ Material:
     m_Floats:
     - _GuardBandPixels: 500
     - _PreviewMode: 0
-    - _ShiftPixels: 0
+    - _ShiftPixels: -124
     m_Colors:
     - _OutOfRangeColor: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []

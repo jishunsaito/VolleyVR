@@ -2,61 +2,52 @@ using UnityEngine;
 
 public class BallSpawner : MonoBehaviour
 {
-    public GameObject ballPrefab;
+    [Header("Ball")]
+    [SerializeField] private GameObject ballPrefab;
 
-    GameObject currentBall;
+    private GameObject currentBall;
 
-    Vector3 spawnPos = new Vector3(-0.555f, 2.23f, -1.634f);
+    public GameObject CurrentBall => currentBall;
 
-    bool courtChanged = false;
-
-    void Start()
+    public GameObject SpawnBall(Transform spawnPoint)
     {
-        SpawnBall();
-    }
-
-    void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.Z))
+        if (ballPrefab == null)
         {
-            RespawnBall();
+            Debug.LogError("[BallSpawner] Ball Prefab が設定されていません。");
+            return null;
         }
 
-        if (Input.GetKeyDown(KeyCode.C))
+        if (spawnPoint == null)
         {
-            courtChanged = !courtChanged;
-            RespawnBall();
-        }
-    }
-
-    void RespawnBall()
-    {
-        if (currentBall != null)
-        {
-            Destroy(currentBall);
+            Debug.LogError("[BallSpawner] Spawn Point がnullです。");
+            return null;
         }
 
-        SpawnBall();
+        currentBall = Instantiate(
+            ballPrefab,
+            spawnPoint.position,
+            spawnPoint.rotation
+        );
+
+        Debug.Log(
+            $"[BallSpawner] Spawned at {spawnPoint.name} / {spawnPoint.position}"
+        );
+
+        return currentBall;
     }
 
-    void SpawnBall()
+    public GameObject RespawnBall(Transform spawnPoint)
     {
-        Vector3 pos = GetSpawnPosition();
-
-        currentBall = Instantiate(ballPrefab, pos, Quaternion.identity);
-
-        BallController bc = currentBall.GetComponent<BallController>();
-        if (bc != null)
-        {
-            bc.SetCourtChanged(courtChanged);
-        }
+        DestroyCurrentBall();
+        return SpawnBall(spawnPoint);
     }
 
-    Vector3 GetSpawnPosition()
+    public void DestroyCurrentBall()
     {
-        if (!courtChanged) return spawnPos;
+        if (currentBall == null)
+            return;
 
-        // xz平面で原点対称
-        return new Vector3(-spawnPos.x, spawnPos.y, -spawnPos.z);
+        Destroy(currentBall);
+        currentBall = null;
     }
 }
