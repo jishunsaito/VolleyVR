@@ -24,9 +24,49 @@ using UnityEngine;
 /// Z
 /// ↓
 /// Respawn
+///
+/// Court Change:
+///
+/// Left Court
+/// ↓
+/// PlayRoot Y = 基準角度
+///
+/// Right Court
+/// ↓
+/// PlayRoot Y = 基準角度 + 180°
+///
+/// PlayRootの子にある
+/// Player / ServePoint / ReceivePoint等を
+/// 一括で反対コートへ移動する。
 /// </summary>
 public class RallyController : MonoBehaviour
 {
+    // ============================================================
+    // Court Side
+    // ============================================================
+
+    public enum CourtSide
+    {
+        Left = 0,
+        Right = 1
+    }
+
+
+    [Header("Court Side")]
+
+    [Tooltip(
+        "プレー関係のオブジェクトをまとめた親Transform。" +
+        "コート中央をPivotにしてください。"
+    )]
+    [SerializeField]
+    private Transform playRoot;
+
+
+    [SerializeField]
+    private CourtSide currentCourtSide =
+        CourtSide.Left;
+
+
     // ============================================================
     // Serve Start
     // ============================================================
@@ -190,12 +230,45 @@ public class RallyController : MonoBehaviour
     private VolleyballBallPhysics currentBallPhysics;
 
 
+    /// <summary>
+    /// PlayRootの左コート時の基準Rotation。
+    ///
+    /// Inspector上でPlayRootが最初に持っていた
+    /// Rotationをそのまま基準として保存する。
+    /// </summary>
+    private Quaternion basePlayRootRotation =
+        Quaternion.identity;
+
+
+    private bool playRootRotationCached =
+        false;
+
+
+    // ============================================================
+    // Properties
+    // ============================================================
+
+    public CourtSide CurrentCourtSide =>
+        currentCourtSide;
+
+
     // ============================================================
     // Unity
     // ============================================================
 
+    private void Awake()
+    {
+        CachePlayRootRotation();
+    }
+
+
     private void Start()
     {
+        // InspectorでRightを選択した状態から
+        // 開始する場合にも対応。
+        ApplyCourtSide();
+
+
         if (spawnOnStart)
         {
             SpawnBallAtSelectedStart();
@@ -235,6 +308,176 @@ public class RallyController : MonoBehaviour
         {
             SpawnBallAtSelectedStart();
         }
+    }
+
+
+    // ============================================================
+    // Court Side
+    // ============================================================
+
+    /// <summary>
+    /// PlayRootの初期Rotationを保存する。
+    ///
+    /// Left Court:
+    ///     初期Rotation
+    ///
+    /// Right Court:
+    ///     初期Rotation + Y 180°
+    ///
+    /// として使用する。
+    /// </summary>
+    private void CachePlayRootRotation()
+    {
+        if (playRoot == null)
+        {
+            Debug.LogWarning(
+                "[RallyController] PlayRoot が設定されていません。"
+            );
+
+            return;
+        }
+
+
+        basePlayRootRotation =
+            playRoot.localRotation;
+
+
+        playRootRotationCached =
+            true;
+    }
+
+
+    /// <summary>
+    /// 現在選択されているCourtSideを
+    /// PlayRootへ反映する。
+    /// </summary>
+    private void ApplyCourtSide()
+    {
+        if (playRoot == null)
+        {
+            return;
+        }
+
+
+        if (!playRootRotationCached)
+        {
+            CachePlayRootRotation();
+        }
+
+
+        if (!playRootRotationCached)
+        {
+            return;
+        }
+
+
+        switch (currentCourtSide)
+        {
+            // ----------------------------------------------------
+            // Left
+            //
+            // 元のプレー配置
+            // ----------------------------------------------------
+
+            case CourtSide.Left:
+
+                playRoot.localRotation =
+                    basePlayRootRotation;
+
+                break;
+
+
+            // ----------------------------------------------------
+            // Right
+            //
+            // コート中央を中心に180°回転。
+            //
+            // 原点中心なら
+            //
+            // (x, y, z)
+            // ↓
+            // (-x, y, -z)
+            //
+            // と同じ。
+            // ----------------------------------------------------
+
+            case CourtSide.Right:
+
+                playRoot.localRotation =
+                    basePlayRootRotation *
+                    Quaternion.Euler(
+                        0.0f,
+                        180.0f,
+                        0.0f
+                    );
+
+                break;
+        }
+    }
+
+
+    /// <summary>
+    /// CourtChangeボタンから呼ぶ。
+    ///
+    /// Left <-> Right
+    ///
+    /// を切り替える。
+    ///
+    /// PlayRootを反転した後、
+    /// 現在存在するBallを削除して
+    /// 新しいServeStart位置へRespawnする。
+    /// </summary>
+    public void ToggleCourt()
+    {
+        if (playRoot == null)
+        {
+            Debug.LogError(
+                "[RallyController] PlayRoot が設定されていません。"
+            );
+
+            return;
+        }
+
+
+        // ========================================================
+        // Court Side切り替え
+        // ========================================================
+
+        if (currentCourtSide == CourtSide.Left)
+        {
+            currentCourtSide =
+                CourtSide.Right;
+        }
+        else
+        {
+            currentCourtSide =
+                CourtSide.Left;
+        }
+
+
+        // ========================================================
+        // PlayRootへ反映
+        // ========================================================
+
+        ApplyCourtSide();
+
+
+        Debug.Log(
+            "[RallyController] Court Changed\n" +
+            $"Court Side = {currentCourtSide}\n" +
+            $"PlayRoot Position = {playRoot.position}\n" +
+            $"PlayRoot Rotation = {playRoot.localEulerAngles}"
+        );
+
+
+        // ========================================================
+        // 既存Ballは反転しないのでRespawn
+        //
+        // PlayRootを反転した後なので、
+        // ServeStart.positionも既に反対側になっている。
+        // ========================================================
+
+        SpawnBallAtSelectedStart();
     }
 
 
@@ -323,6 +566,7 @@ public class RallyController : MonoBehaviour
 
         Debug.Log(
             "[RallyController] Spawn\n" +
+            $"Court = {currentCourtSide}\n" +
             $"Start = {selectedServeStart}\n" +
             $"Position = {spawnPoint.position}"
         );
@@ -367,6 +611,10 @@ public class RallyController : MonoBehaviour
         // 選択されたReceiver
         //
         // のXZ方向
+        //
+        // PlayRoot反転後でも
+        // World Positionから計算するため
+        // 既存処理をそのまま使用できる。
         // ========================================================
 
         Vector3 tossDirection =
@@ -393,6 +641,7 @@ public class RallyController : MonoBehaviour
 
         Debug.Log(
             "[RallyController] Serve Toss Start\n" +
+            $"Court = {currentCourtSide}\n" +
             $"Receiver = {target.name}\n" +
             $"Receiver Position = {target.position}\n" +
             $"Toss Height = {tossHeight:F2} m\n" +
@@ -466,6 +715,7 @@ public class RallyController : MonoBehaviour
 
         Debug.Log(
             "[RallyController] Spike Serve Impact\n" +
+            $"Court = {currentCourtSide}\n" +
             $"Hit Position = {currentBallPhysics.transform.position}\n" +
             $"Receiver = {target.name}\n" +
             $"Receiver Position = {target.position}\n" +
@@ -477,7 +727,8 @@ public class RallyController : MonoBehaviour
         // ========================================================
         // Receiver Transformそのものを渡す。
         //
-        // targetHeightOffsetなどは一切加えない。
+        // PlayRootが反転していれば
+        // target.positionも反転後のWorld座標になる。
         // ========================================================
 
         currentBallPhysics.SpikeServe(
@@ -494,8 +745,6 @@ public class RallyController : MonoBehaviour
 
     /// <summary>
     /// BallがReceiver Transformへ到達した瞬間。
-    ///
-    /// 現段階ではBallPhysics側で停止。
     ///
     /// 次の段階ではここから
     /// Receive / Cutを開始する。

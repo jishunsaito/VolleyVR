@@ -8,7 +8,6 @@ public class ImageController : MonoBehaviour
     // =========================================================
 
     [Header("Main Display Materials")]
-
     [SerializeField]
     private Material leftMaterial;
 
@@ -113,7 +112,14 @@ public class ImageController : MonoBehaviour
     public Vector3 stereoCameraPosition =
         Vector3.zero;
 
+
+    [Tooltip("StereoCamera親のPitch [deg]")]
     public float stereoCameraRotationX =
+        0.0f;
+
+
+    [Tooltip("StereoCamera親のYaw [deg]")]
+    public float stereoCameraRotationY =
         0.0f;
 
 
@@ -162,12 +168,20 @@ public class ImageController : MonoBehaviour
         stereoCameraRoot =
             transform;
 
+
         stereoCameraPosition =
             transform.localPosition;
+
 
         stereoCameraRotationX =
             NormalizeAngle(
                 transform.localEulerAngles.x
+            );
+
+
+        stereoCameraRotationY =
+            NormalizeAngle(
+                transform.localEulerAngles.y
             );
     }
 
@@ -180,20 +194,11 @@ public class ImageController : MonoBehaviour
 
     private void Start()
     {
-        /*
-         * 既存の映像出力経路は変更しない。
-         *
-         * 1. Guard Band RenderTexture生成
-         * 2. MaterialへTexture設定
-         * 3. Main / Preview Mode設定
-         * 4. 各パラメータ反映
-         */
-
         CreateGuardBandRenderTextures();
 
         ApplyTexturesToMaterials();
 
-        //ApplyMaterialModes();
+        // ApplyMaterialModes();
 
         ValidateMaterials();
 
@@ -203,18 +208,7 @@ public class ImageController : MonoBehaviour
 
     private void Update()
     {
-        /*
-         * Main DisplayとPreviewのModeを
-         * 毎フレーム明示する。
-         *
-         * Main:
-         * _PreviewMode = 0
-         *
-         * Preview:
-         * _PreviewMode = 1
-         */
-
-        //ApplyMaterialModes();
+        // ApplyMaterialModes();
 
         ApplyImageShift();
 
@@ -314,21 +308,13 @@ public class ImageController : MonoBehaviour
             );
 
 
-        /*
-         * Cameraの出力先を
-         * Guard Band付きRenderTextureへ変更。
-         */
-
         leftCamera.targetTexture =
             leftGuardTexture;
+
 
         rightCamera.targetTexture =
             rightGuardTexture;
 
-
-        // -----------------------------------------------------
-        // Camera Sensor Width
-        // -----------------------------------------------------
 
         ApplyGuardBandSensorSize();
     }
@@ -346,11 +332,6 @@ public class ImageController : MonoBehaviour
         int visibleWidth =
             source.width;
 
-
-        /*
-         * 元の画面幅の左右に
-         * guardBandPixelsを追加する。
-         */
 
         descriptor.width =
             visibleWidth +
@@ -373,6 +354,7 @@ public class ImageController : MonoBehaviour
 
         texture.filterMode =
             source.filterMode;
+
 
         texture.wrapMode =
             TextureWrapMode.Clamp;
@@ -507,9 +489,6 @@ public class ImageController : MonoBehaviour
 
         // -----------------------------------------------------
         // Preview RawImages
-        //
-        // ここは映像が正常に映っていた元コードのまま。
-        // Materialの付け替えなどは行わない。
         // -----------------------------------------------------
 
         if (leftPreviewRawImage != null &&
@@ -535,27 +514,11 @@ public class ImageController : MonoBehaviour
 
     private void ApplyMaterialModes()
     {
-        /*
-         * =====================================================
-         * Main Display
-         * =====================================================
-         *
-         * PreviewMode = 0
-         *
-         * Shader側で水平方向を反転。
-         *
-         * Unity上でMain Displayを直接見ると
-         * 鏡像になっている状態。
-         *
-         * Wheatstoneでは、この画像を
-         * 実際のHalf Mirrorでもう一度反転して見るため、
-         * 観察者からは元の正常な向きに見える。
-         */
-
         SetMaterialMode(
             leftMaterial,
             false
         );
+
 
         SetMaterialMode(
             rightMaterial,
@@ -563,20 +526,11 @@ public class ImageController : MonoBehaviour
         );
 
 
-        /*
-         * =====================================================
-         * UI Preview
-         * =====================================================
-         *
-         * PreviewMode = 1
-         *
-         * Shader側では水平反転しない。
-         */
-
         SetMaterialMode(
             leftPreviewMaterial,
             true
         );
+
 
         SetMaterialMode(
             rightPreviewMaterial,
@@ -604,10 +558,6 @@ public class ImageController : MonoBehaviour
         );
 
 
-        /*
-         * Guard Bandは整数。
-         */
-
         material.SetInt(
             GuardBandPixelsProperty,
             guardBandPixels
@@ -621,24 +571,6 @@ public class ImageController : MonoBehaviour
 
     private void ValidateMaterials()
     {
-        /*
-         * MainとPreviewで同じMaterialを使うと、
-         *
-         * Main
-         * _PreviewMode = 0
-         *
-         * の後に、
-         *
-         * Preview
-         * _PreviewMode = 1
-         *
-         * が同じMaterialへ書き込まれる。
-         *
-         * その場合、MainもPreview Modeになって
-         * 水平反転しなくなる。
-         */
-
-
         if (leftMaterial != null &&
             leftPreviewMaterial != null &&
             leftMaterial == leftPreviewMaterial)
@@ -672,32 +604,6 @@ public class ImageController : MonoBehaviour
 
     private void ApplyImageShift()
     {
-        /*
-         * shiftPixels は int。
-         *
-         * 例:
-         *
-         * shiftPixels = 100
-         *
-         * Left
-         * +100 px
-         *
-         * Right
-         * -100 px
-         *
-         *
-         * PreviewとMainで与える論理Shift値は同じ。
-         *
-         * Main DisplayではShader側で
-         * 水平座標そのものを反転するので、
-         * Displayを直接見た場合のShift方向も
-         * Previewに対して鏡映しになる。
-         *
-         * それをHalf Mirrorで見ることで
-         * 最終的にはPreviewと同じ方向になる。
-         */
-
-
         // -----------------------------------------------------
         // Main Display
         // -----------------------------------------------------
@@ -706,6 +612,7 @@ public class ImageController : MonoBehaviour
             leftMaterial,
             shiftPixels
         );
+
 
         ApplyShiftToMaterial(
             rightMaterial,
@@ -721,6 +628,7 @@ public class ImageController : MonoBehaviour
             leftPreviewMaterial,
             shiftPixels
         );
+
 
         ApplyShiftToMaterial(
             rightPreviewMaterial,
@@ -739,10 +647,6 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
-        /*
-         * shiftはintのままShaderへ送る。
-         */
 
         material.SetInt(
             ShiftPixelsProperty,
@@ -769,15 +673,6 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
-        /*
-         * baselineはmm。
-         *
-         * Unityでは
-         * 1 Unit = 1 m
-         *
-         * として0.001倍。
-         */
 
         float halfBaseline =
             baseline *
@@ -837,6 +732,7 @@ public class ImageController : MonoBehaviour
             leftCamera.usePhysicalProperties =
                 true;
 
+
             leftCamera.focalLength =
                 focalLength;
         }
@@ -847,15 +743,11 @@ public class ImageController : MonoBehaviour
             rightCamera.usePhysicalProperties =
                 true;
 
+
             rightCamera.focalLength =
                 focalLength;
         }
 
-
-        /*
-         * 焦点距離を変更しても
-         * Guard Band用Sensor Widthを維持。
-         */
 
         ApplyGuardBandSensorSize();
     }
@@ -873,9 +765,21 @@ public class ImageController : MonoBehaviour
         }
 
 
+        // -----------------------------------------------------
+        // Position
+        // -----------------------------------------------------
+
         stereoCameraRoot.localPosition =
             stereoCameraPosition;
 
+
+        // -----------------------------------------------------
+        // Rotation
+        //
+        // X = Pitch
+        // Y = Yaw / Court Side
+        // Z = 現在値を維持
+        // -----------------------------------------------------
 
         Vector3 currentEulerAngles =
             stereoCameraRoot
@@ -886,8 +790,72 @@ public class ImageController : MonoBehaviour
             stereoCameraRotationX;
 
 
+        currentEulerAngles.y =
+            stereoCameraRotationY;
+
+
         stereoCameraRoot.localEulerAngles =
             currentEulerAngles;
+    }
+
+
+    // =========================================================
+    // Court Change
+    // =========================================================
+
+    /// <summary>
+    /// StereoCameraを反対側のコートへ移動する。
+    ///
+    /// Position Z:
+    /// z -> -z
+    ///
+    /// Rotation Y:
+    /// y -> y + 180°
+    ///
+    /// もう一度呼ぶと元に戻る。
+    /// </summary>
+    public void ToggleCourt()
+    {
+        // -----------------------------------------------------
+        // Z座標反転
+        // -----------------------------------------------------
+
+        Vector3 position =
+            stereoCameraPosition;
+
+
+        position.z =
+            -position.z;
+
+
+        stereoCameraPosition =
+            position;
+
+
+        // -----------------------------------------------------
+        // Y回転 180°
+        // -----------------------------------------------------
+
+        stereoCameraRotationY =
+            NormalizeAngle(
+                stereoCameraRotationY +
+                180.0f
+            );
+
+
+        // -----------------------------------------------------
+        // 即時反映
+        // -----------------------------------------------------
+
+        ApplyStereoCameraTransform();
+
+
+        Debug.Log(
+            "[ImageController] Court Changed\n" +
+            $"Position Z = {stereoCameraPosition.z:F3}\n" +
+            $"Rotation Y = {stereoCameraRotationY:F1} deg",
+            this
+        );
     }
 
 
@@ -897,7 +865,7 @@ public class ImageController : MonoBehaviour
 
     private void ApplyAllParameters()
     {
-        //ApplyMaterialModes();
+        // ApplyMaterialModes();
 
         ApplyImageShift();
 
@@ -920,6 +888,7 @@ public class ImageController : MonoBehaviour
             leftCamera.targetTexture =
                 originalLeftTexture;
 
+
             leftCamera.sensorSize =
                 originalLeftSensorSize;
         }
@@ -929,6 +898,7 @@ public class ImageController : MonoBehaviour
         {
             rightCamera.targetTexture =
                 originalRightTexture;
+
 
             rightCamera.sensorSize =
                 originalRightSensorSize;
@@ -946,9 +916,11 @@ public class ImageController : MonoBehaviour
         {
             leftGuardTexture.Release();
 
+
             Destroy(
                 leftGuardTexture
             );
+
 
             leftGuardTexture =
                 null;
@@ -959,9 +931,11 @@ public class ImageController : MonoBehaviour
         {
             rightGuardTexture.Release();
 
+
             Destroy(
                 rightGuardTexture
             );
+
 
             rightGuardTexture =
                 null;
@@ -977,9 +951,20 @@ public class ImageController : MonoBehaviour
         float angle
     )
     {
+        angle %=
+            360.0f;
+
+
         if (angle > 180.0f)
         {
             angle -=
+                360.0f;
+        }
+
+
+        if (angle <= -180.0f)
+        {
+            angle +=
                 360.0f;
         }
 

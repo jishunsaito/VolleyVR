@@ -16,6 +16,20 @@ public class UIController : MonoBehaviour
     private ImageController imageController;
 
 
+    [SerializeField]
+    private RallyController rallyController;
+
+
+    // =========================================================
+    // Court Change
+    // =========================================================
+
+    [Header("Court Change")]
+
+    [SerializeField]
+    private Button courtChangeButton;
+
+
     // =========================================================
     // Ball Disparity
     // =========================================================
@@ -129,9 +143,6 @@ public class UIController : MonoBehaviour
 
     // =========================================================
     // Slider Range
-    //
-    // SerializeFieldを付けていないので
-    // Inspectorには表示されない。
     // =========================================================
 
     private int shiftMin = -500;
@@ -176,7 +187,9 @@ public class UIController : MonoBehaviour
                 this
             );
 
+
             enabled = false;
+
             return;
         }
 
@@ -195,6 +208,8 @@ public class UIController : MonoBehaviour
 
         BindPitch();
 
+        BindCourtChange();
+
 
         UpdateOutputText();
     }
@@ -209,6 +224,17 @@ public class UIController : MonoBehaviour
 
 
         UpdateOutputText();
+    }
+
+
+    private void OnDestroy()
+    {
+        if (courtChangeButton != null)
+        {
+            courtChangeButton.onClick.RemoveListener(
+                OnCourtChangeButtonClicked
+            );
+        }
     }
 
 
@@ -309,7 +335,10 @@ public class UIController : MonoBehaviour
                     imageController
                         .stereoCameraPosition;
 
-                position.x = value;
+
+                position.x =
+                    value;
+
 
                 imageController
                     .stereoCameraPosition =
@@ -344,7 +373,10 @@ public class UIController : MonoBehaviour
                     imageController
                         .stereoCameraPosition;
 
-                position.y = value;
+
+                position.y =
+                    value;
+
 
                 imageController
                     .stereoCameraPosition =
@@ -379,7 +411,10 @@ public class UIController : MonoBehaviour
                     imageController
                         .stereoCameraPosition;
 
-                position.z = value;
+
+                position.z =
+                    value;
+
 
                 imageController
                     .stereoCameraPosition =
@@ -422,6 +457,70 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
+    // Court Change
+    // =========================================================
+
+    private void BindCourtChange()
+    {
+        if (courtChangeButton == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにCourtChange Buttonが設定されていません。",
+                this
+            );
+
+
+            return;
+        }
+
+
+        if (rallyController == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにRallyControllerが設定されていません。",
+                this
+            );
+
+
+            return;
+        }
+
+
+        courtChangeButton.onClick.AddListener(
+            OnCourtChangeButtonClicked
+        );
+    }
+
+
+    private void OnCourtChangeButtonClicked()
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+
+        // =====================================================
+        // RallyController側で
+        //
+        // PlayRoot
+        //
+        // Left
+        //     基準Rotation
+        //
+        // Right
+        //     Y + 180°
+        //
+        // を切り替える。
+        //
+        // StereoCameraには触らない。
+        // =====================================================
+
+        rallyController.ToggleCourt();
+    }
+
+
+    // =========================================================
     // Parameter Binding
     // =========================================================
 
@@ -444,13 +543,10 @@ public class UIController : MonoBehaviour
                 this
             );
 
+
             return;
         }
 
-
-        // =====================================================
-        // Slider / InputField設定
-        // =====================================================
 
         slider.wholeNumbers =
             wholeNumbers;
@@ -459,16 +555,9 @@ public class UIController : MonoBehaviour
         inputField.contentType =
             wholeNumbers
 
-                ? TMP_InputField.ContentType
-                    .IntegerNumber
+                ? TMP_InputField.ContentType.IntegerNumber
+                : TMP_InputField.ContentType.DecimalNumber;
 
-                : TMP_InputField.ContentType
-                    .DecimalNumber;
-
-
-        // =====================================================
-        // ImageControllerから初期値取得
-        // =====================================================
 
         float initialValue =
             getter();
@@ -483,10 +572,6 @@ public class UIController : MonoBehaviour
         }
 
 
-        // =====================================================
-        // Slider Range設定
-        // =====================================================
-
         SetInitialSliderRange(
             slider,
             defaultMin,
@@ -495,10 +580,6 @@ public class UIController : MonoBehaviour
             wholeNumbers
         );
 
-
-        // =====================================================
-        // UIへ初期値反映
-        // =====================================================
 
         SynchronizeControls(
             slider,
@@ -509,7 +590,7 @@ public class UIController : MonoBehaviour
 
 
         // =====================================================
-        // Slider操作
+        // Slider
         // =====================================================
 
         slider.onValueChanged.AddListener(
@@ -553,7 +634,7 @@ public class UIController : MonoBehaviour
 
 
         // =====================================================
-        // InputField操作
+        // InputField
         // =====================================================
 
         inputField.onEndEdit.AddListener(
@@ -604,11 +685,6 @@ public class UIController : MonoBehaviour
                 }
 
 
-                // =============================================
-                // Input値が範囲外なら
-                // Slider範囲を拡張
-                // =============================================
-
                 ExpandSliderRange(
                     slider,
                     inputValue,
@@ -638,7 +714,7 @@ public class UIController : MonoBehaviour
     // =========================================================
     // ParameterManager用
     //
-    // Reset / Load後に呼ぶ
+    // Reset / Load後にも使用
     // =========================================================
 
     public void RefreshFromController()
@@ -805,6 +881,7 @@ public class UIController : MonoBehaviour
                     minValue
                 );
 
+
             maxValue =
                 Mathf.Ceil(
                     maxValue
@@ -820,6 +897,7 @@ public class UIController : MonoBehaviour
             minValue -=
                 1.0f;
 
+
             maxValue +=
                 1.0f;
         }
@@ -827,6 +905,7 @@ public class UIController : MonoBehaviour
 
         slider.minValue =
             minValue;
+
 
         slider.maxValue =
             maxValue;
@@ -846,6 +925,7 @@ public class UIController : MonoBehaviour
         float minValue =
             slider.minValue;
 
+
         float maxValue =
             slider.maxValue;
 
@@ -854,6 +934,7 @@ public class UIController : MonoBehaviour
             Mathf.Max(
                 maxValue -
                 minValue,
+
                 1.0f
             );
 
@@ -862,6 +943,7 @@ public class UIController : MonoBehaviour
             Mathf.Max(
                 currentRange *
                 0.1f,
+
                 1.0f
             );
 
@@ -889,6 +971,7 @@ public class UIController : MonoBehaviour
                     minValue
                 );
 
+
             maxValue =
                 Mathf.Ceil(
                     maxValue
@@ -898,6 +981,7 @@ public class UIController : MonoBehaviour
 
         slider.minValue =
             minValue;
+
 
         slider.maxValue =
             maxValue;
@@ -956,6 +1040,7 @@ public class UIController : MonoBehaviour
         {
             value =
                 0.0f;
+
 
             return false;
         }
@@ -1058,8 +1143,10 @@ public class UIController : MonoBehaviour
             text +=
                 "Calculator : Not Assigned";
 
+
             outputText.text =
                 text;
+
 
             return;
         }
@@ -1072,6 +1159,7 @@ public class UIController : MonoBehaviour
         text +=
             "<b>Ball</b>\n";
 
+
         if (!disparityCalculator.HasBall)
         {
             text +=
@@ -1083,10 +1171,14 @@ public class UIController : MonoBehaviour
                 disparityCalculator
                     .BallWorldPosition;
 
+
             text +=
                 $"X : {ballPosition.x:F3}\n" +
+
                 $"Y : {ballPosition.y:F3}\n" +
+
                 $"Z : {ballPosition.z:F3}\n\n" +
+
 
                 $"Depth Z : " +
                 $"{disparityCalculator.DepthMeters:F3} m\n" +
@@ -1112,6 +1204,7 @@ public class UIController : MonoBehaviour
         text +=
             "<b>Near Pole (Front)</b>\n";
 
+
         if (!disparityCalculator.HasNearPole)
         {
             text +=
@@ -1119,10 +1212,6 @@ public class UIController : MonoBehaviour
         }
         else
         {
-            Vector3 nearPolePosition =
-                disparityCalculator
-                    .NearPoleWorldPosition;
-
             text +=
 
                 $"Depth Z : " +
@@ -1149,6 +1238,7 @@ public class UIController : MonoBehaviour
         text +=
             "<b>Far Pole (Back)</b>\n";
 
+
         if (!disparityCalculator.HasFarPole)
         {
             text +=
@@ -1156,11 +1246,8 @@ public class UIController : MonoBehaviour
         }
         else
         {
-            Vector3 farPolePosition =
-                disparityCalculator
-                    .FarPoleWorldPosition;
-
             text +=
+
                 $"Depth Z : " +
                 $"{disparityCalculator.FarPoleDepthMeters:F3} m\n" +
 
@@ -1185,18 +1272,17 @@ public class UIController : MonoBehaviour
         text +=
             "<b>Net Center</b>\n";
 
+
         if (!disparityCalculator.HasNetCenter)
         {
             text +=
-                disparityCalculator.NetCenterStatusMessage;
+                disparityCalculator
+                    .NetCenterStatusMessage;
         }
         else
         {
-            Vector3 netCenterPosition =
-                disparityCalculator
-                    .NetCenterWorldPosition;
-
             text +=
+
                 $"Depth Z : " +
                 $"{disparityCalculator.NetCenterDepthMeters:F3} m\n" +
 
