@@ -3,44 +3,69 @@ using UnityEngine;
 /// <summary>
 /// ラリー全体の進行を管理する。
 ///
-/// 現在:
+/// Phase:
 ///
-/// Spawn
+/// Serve
 /// ↓
-/// V
+/// Receive
 /// ↓
-/// 斜め前へToss
+/// Toss
 /// ↓
-/// Apex
-/// ↓
-/// 下降
-/// ↓
-/// Serve Hit Height
-/// ↓
-/// Spike Serve
-/// ↓
-/// Receiver Transform
+/// Spike
 ///
-/// Z
+/// Start Phase / End Phaseを指定することで、
+/// 一部のプレーだけシミュレートできる。
+///
+/// 現在実装:
+///
+/// Serve
+/// Receive
+/// Toss
+///
+/// 今後:
+///
+/// Spike
+///
+/// Setter Toss:
+///
+/// Setter Position
 /// ↓
-/// Respawn
+/// Setter Toss Target
 ///
-/// Court Change:
+/// TargetとApex Heightから
+/// VolleyballBallPhysicsが初速度を逆算する。
 ///
-/// Left Court
-/// ↓
-/// PlayRoot Y = 基準角度
-///
-/// Right Court
-/// ↓
-/// PlayRoot Y = 基準角度 + 180°
-///
-/// PlayRootの子にある
-/// Player / ServePoint / ReceivePoint等を
-/// 一括で反対コートへ移動する。
+/// Target到達後もBallは停止しない。
 /// </summary>
 public class RallyController : MonoBehaviour
 {
+    // ============================================================
+    // Play Phase
+    // ============================================================
+
+    public enum PlayPhase
+    {
+        Serve = 0,
+        Receive = 1,
+        Toss = 2,
+        Spike = 3
+    }
+
+
+    [Header("Simulation Range")]
+
+    [Tooltip("シミュレーション開始Phase")]
+    [SerializeField]
+    private PlayPhase startPhase =
+        PlayPhase.Serve;
+
+
+    [Tooltip("シミュレーション終了Phase")]
+    [SerializeField]
+    private PlayPhase endPhase =
+        PlayPhase.Receive;
+
+
     // ============================================================
     // Court Side
     // ============================================================
@@ -110,8 +135,10 @@ public class RallyController : MonoBehaviour
     [SerializeField]
     private Transform serveStartLeft;
 
+
     [SerializeField]
     private Transform serveStartCenter;
+
 
     [SerializeField]
     private Transform serveStartRight;
@@ -126,8 +153,6 @@ public class RallyController : MonoBehaviour
 
     // ============================================================
     // Receiver / Serve Target
-    //
-    // ここにはカットする人のTransformをそのまま登録する。
     // ============================================================
 
     [Header("Serve Target - Receiver Transforms")]
@@ -135,8 +160,10 @@ public class RallyController : MonoBehaviour
     [SerializeField]
     private Transform serveTargetLeft;
 
+
     [SerializeField]
     private Transform serveTargetCenter;
+
 
     [SerializeField]
     private Transform serveTargetRight;
@@ -150,13 +177,80 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
+    // Receive / Serve Cut
+    // ============================================================
+
+    [Header("Serve Receive / Cut")]
+
+    [Tooltip(
+        "サーブカット後にボールを返すSetter位置。" +
+        "PlayRootの子に置く。"
+    )]
+    [SerializeField]
+    private Transform setterPosition;
+
+
+    [Tooltip(
+        "サーブカット軌道の最高到達World Y [m]。" +
+        "この高さで鉛直速度が0になる。"
+    )]
+    [SerializeField]
+    private float receiveApexHeight =
+        4.0f;
+
+
+    [Tooltip(
+        "サーブカット時のBackspin [rpm]。" +
+        "現段階では見た目の回転のみ。"
+    )]
+    [SerializeField]
+    private float receiveBackspinRpm =
+        180.0f;
+
+
+    [Tooltip(
+        "Receiver位置で停止するFixedUpdate数。" +
+        "0なら即座にカット。" +
+        "1なら1物理フレーム停止。"
+    )]
+    [Min(0)]
+    [SerializeField]
+    private int receiveContactFixedFrames =
+        1;
+
+
+    // ============================================================
+    // Setter Toss
+    // ============================================================
+
+    [Header("Setter Toss")]
+
+    [Tooltip(
+        "Setter Tossが通過するTarget位置。" +
+        "将来的にはLeft / RightやToss Lengthで" +
+        "このTargetを選択する。"
+    )]
+    [SerializeField]
+    private Transform setterTossTarget;
+
+
+    [Tooltip(
+        "Setter Tossの最高到達World Y [m]。" +
+        "Target位置とこの高さから初速度を自動計算する。"
+    )]
+    [SerializeField]
+    private float setterTossApexHeight =
+        4.0f;
+
+
+    // ============================================================
     // Serve Toss
     // ============================================================
 
     [Header("Serve Toss")]
 
     [Tooltip(
-        "ボール現在位置からトス最高点までの上昇量 [m]"
+        "ボール現在位置からサーブ前トス最高点までの上昇量 [m]"
     )]
     [SerializeField]
     private float tossHeight =
@@ -164,7 +258,7 @@ public class RallyController : MonoBehaviour
 
 
     [Tooltip(
-        "下降中にこのワールドY座標へ到達した瞬間にサーブを打つ [m]"
+        "下降中にこのWorld Yへ到達した瞬間にサーブを打つ [m]"
     )]
     [SerializeField]
     private float serveHitHeight =
@@ -172,7 +266,7 @@ public class RallyController : MonoBehaviour
 
 
     [Tooltip(
-        "ServeStartからサーブ打点までにコート方向へ何m進むか"
+        "ServeStartからサーブ打点までにコート方向へ進む距離 [m]"
     )]
     [SerializeField]
     private float tossForwardDistance =
@@ -185,7 +279,9 @@ public class RallyController : MonoBehaviour
 
     [Header("Spike Serve")]
 
-    [Tooltip("サーブ打球直後の速度 [km/h]")]
+    [Tooltip(
+        "サーブ打球直後の速度 [km/h]"
+    )]
     [SerializeField]
     private float serveSpeedKmh =
         130.0f;
@@ -212,12 +308,11 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
-    // Debug
+    // Keyboard Debug
     // ============================================================
 
     [Header("Keyboard Debug")]
 
-    [Tooltip("V = Spike Serve / Z = Respawn")]
     [SerializeField]
     private bool enableKeyboardDebug =
         true;
@@ -230,12 +325,6 @@ public class RallyController : MonoBehaviour
     private VolleyballBallPhysics currentBallPhysics;
 
 
-    /// <summary>
-    /// PlayRootの左コート時の基準Rotation。
-    ///
-    /// Inspector上でPlayRootが最初に持っていた
-    /// Rotationをそのまま基準として保存する。
-    /// </summary>
     private Quaternion basePlayRootRotation =
         Quaternion.identity;
 
@@ -252,6 +341,14 @@ public class RallyController : MonoBehaviour
         currentCourtSide;
 
 
+    public PlayPhase StartPhase =>
+        startPhase;
+
+
+    public PlayPhase EndPhase =>
+        endPhase;
+
+
     // ============================================================
     // Unity
     // ============================================================
@@ -264,14 +361,15 @@ public class RallyController : MonoBehaviour
 
     private void Start()
     {
-        // InspectorでRightを選択した状態から
-        // 開始する場合にも対応。
         ApplyCourtSide();
+
+
+        ValidateSimulationRange();
 
 
         if (spawnOnStart)
         {
-            SpawnBallAtSelectedStart();
+            ResetSelectedSimulation();
         }
     }
 
@@ -279,34 +377,345 @@ public class RallyController : MonoBehaviour
     private void Update()
     {
         if (!enableKeyboardDebug)
-            return;
-
-
-        // ========================================================
-        // V
-        //
-        // Toss
-        // ↓
-        // Hit Height
-        // ↓
-        // Serve
-        // ========================================================
-
-        if (Input.GetKeyDown(KeyCode.V))
         {
-            StartSpikeServeSequence();
+            return;
         }
 
 
         // ========================================================
-        // Z
+        // 1 = Serveのみ
+        // ========================================================
+
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+        {
+            SelectSimulationRange(
+                PlayPhase.Serve,
+                PlayPhase.Serve
+            );
+        }
+
+
+        // ========================================================
+        // 2 = Receiveのみ
+        // ========================================================
+
+        if (Input.GetKeyDown(KeyCode.Alpha2))
+        {
+            SelectSimulationRange(
+                PlayPhase.Receive,
+                PlayPhase.Receive
+            );
+        }
+
+
+        // ========================================================
+        // 3 = Serve -> Receive
+        // ========================================================
+
+        if (Input.GetKeyDown(KeyCode.Alpha3))
+        {
+            SelectSimulationRange(
+                PlayPhase.Serve,
+                PlayPhase.Receive
+            );
+        }
+
+
+        // ========================================================
+        // 4 = Tossのみ
+        // ========================================================
+
+        if (Input.GetKeyDown(KeyCode.Alpha4))
+        {
+            SelectSimulationRange(
+                PlayPhase.Toss,
+                PlayPhase.Toss
+            );
+        }
+
+
+        // ========================================================
+        // 5 = Toss -> Spike
         //
-        // Respawn
+        // Spikeはまだ未実装
+        // ========================================================
+
+        if (Input.GetKeyDown(KeyCode.Alpha5))
+        {
+            SelectSimulationRange(
+                PlayPhase.Toss,
+                PlayPhase.Spike
+            );
+        }
+
+
+        // ========================================================
+        // 6 = Serve -> Spike
+        //
+        // Serve
+        // Receive
+        // Toss
+        // Spike
+        // ========================================================
+
+        if (Input.GetKeyDown(KeyCode.Alpha6))
+        {
+            SelectSimulationRange(
+                PlayPhase.Serve,
+                PlayPhase.Spike
+            );
+        }
+
+
+        // ========================================================
+        // V = Simulation Start
+        // ========================================================
+
+        if (Input.GetKeyDown(KeyCode.V))
+        {
+            StartSelectedSimulation();
+        }
+
+
+        // ========================================================
+        // Z = Reset
         // ========================================================
 
         if (Input.GetKeyDown(KeyCode.Z))
         {
-            SpawnBallAtSelectedStart();
+            ResetSelectedSimulation();
+        }
+    }
+
+
+    // ============================================================
+    // Simulation Selection
+    // ============================================================
+
+    public void SelectSimulationRange(
+        PlayPhase newStartPhase,
+        PlayPhase newEndPhase
+    )
+    {
+        if (
+            (int)newStartPhase >
+            (int)newEndPhase
+        )
+        {
+            Debug.LogError(
+                "[RallyController] " +
+                "Start PhaseはEnd Phase以前にしてください。"
+            );
+
+            return;
+        }
+
+
+        startPhase =
+            newStartPhase;
+
+
+        endPhase =
+            newEndPhase;
+
+
+        Debug.Log(
+            "[RallyController] Simulation Selected\n" +
+            $"Start = {startPhase}\n" +
+            $"End = {endPhase}"
+        );
+
+
+        ResetSelectedSimulation();
+    }
+
+
+    // ============================================================
+    // UI
+    // ============================================================
+
+    public void SetStartPhase(
+        int index
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                3
+            );
+
+
+        startPhase =
+            (PlayPhase)index;
+
+
+        ValidateSimulationRange();
+    }
+
+
+    public void SetEndPhase(
+        int index
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                3
+            );
+
+
+        endPhase =
+            (PlayPhase)index;
+
+
+        ValidateSimulationRange();
+    }
+
+
+    private void ValidateSimulationRange()
+    {
+        if (
+            (int)startPhase <=
+            (int)endPhase
+        )
+        {
+            return;
+        }
+
+
+        Debug.LogWarning(
+            "[RallyController] " +
+            "Start PhaseがEnd Phaseより後なので、" +
+            "End PhaseをStart Phaseへ合わせます。"
+        );
+
+
+        endPhase =
+            startPhase;
+    }
+
+
+    private bool ShouldContinueAfter(
+        PlayPhase completedPhase
+    )
+    {
+        return
+            (int)completedPhase <
+            (int)endPhase;
+    }
+
+
+    // ============================================================
+    // Simulation Start
+    // ============================================================
+
+    public void StartSelectedSimulation()
+    {
+        ValidateSimulationRange();
+
+
+        switch (startPhase)
+        {
+            // ----------------------------------------------------
+            // Serve
+            // ----------------------------------------------------
+
+            case PlayPhase.Serve:
+
+                SpawnBallAtSelectedStart();
+
+
+                StartSpikeServeSequence();
+
+                break;
+
+
+            // ----------------------------------------------------
+            // Receive
+            // ----------------------------------------------------
+
+            case PlayPhase.Receive:
+
+                SpawnBallAtSelectedReceiver();
+
+
+                StartReceiveSequence();
+
+                break;
+
+
+            // ----------------------------------------------------
+            // Toss
+            // ----------------------------------------------------
+
+            case PlayPhase.Toss:
+
+                SpawnBallAtSetter();
+
+
+                StartSetterTossSequence();
+
+                break;
+
+
+            // ----------------------------------------------------
+            // Spike
+            // ----------------------------------------------------
+
+            case PlayPhase.Spike:
+
+                Debug.LogWarning(
+                    "[RallyController] " +
+                    "Spike開始はまだ未実装です。"
+                );
+
+                break;
+        }
+    }
+
+
+    // ============================================================
+    // Simulation Reset
+    // ============================================================
+
+    public void ResetSelectedSimulation()
+    {
+        ValidateSimulationRange();
+
+
+        switch (startPhase)
+        {
+            case PlayPhase.Serve:
+
+                SpawnBallAtSelectedStart();
+
+                break;
+
+
+            case PlayPhase.Receive:
+
+                SpawnBallAtSelectedReceiver();
+
+                break;
+
+
+            case PlayPhase.Toss:
+
+                SpawnBallAtSetter();
+
+                break;
+
+
+            case PlayPhase.Spike:
+
+                Debug.LogWarning(
+                    "[RallyController] " +
+                    "Spike開始位置はまだ未実装です。"
+                );
+
+                break;
         }
     }
 
@@ -315,17 +724,6 @@ public class RallyController : MonoBehaviour
     // Court Side
     // ============================================================
 
-    /// <summary>
-    /// PlayRootの初期Rotationを保存する。
-    ///
-    /// Left Court:
-    ///     初期Rotation
-    ///
-    /// Right Court:
-    ///     初期Rotation + Y 180°
-    ///
-    /// として使用する。
-    /// </summary>
     private void CachePlayRootRotation()
     {
         if (playRoot == null)
@@ -347,10 +745,6 @@ public class RallyController : MonoBehaviour
     }
 
 
-    /// <summary>
-    /// 現在選択されているCourtSideを
-    /// PlayRootへ反映する。
-    /// </summary>
     private void ApplyCourtSide()
     {
         if (playRoot == null)
@@ -371,62 +765,27 @@ public class RallyController : MonoBehaviour
         }
 
 
-        switch (currentCourtSide)
+        if (
+            currentCourtSide ==
+            CourtSide.Left
+        )
         {
-            // ----------------------------------------------------
-            // Left
-            //
-            // 元のプレー配置
-            // ----------------------------------------------------
-
-            case CourtSide.Left:
-
-                playRoot.localRotation =
-                    basePlayRootRotation;
-
-                break;
-
-
-            // ----------------------------------------------------
-            // Right
-            //
-            // コート中央を中心に180°回転。
-            //
-            // 原点中心なら
-            //
-            // (x, y, z)
-            // ↓
-            // (-x, y, -z)
-            //
-            // と同じ。
-            // ----------------------------------------------------
-
-            case CourtSide.Right:
-
-                playRoot.localRotation =
-                    basePlayRootRotation *
-                    Quaternion.Euler(
-                        0.0f,
-                        180.0f,
-                        0.0f
-                    );
-
-                break;
+            playRoot.localRotation =
+                basePlayRootRotation;
+        }
+        else
+        {
+            playRoot.localRotation =
+                basePlayRootRotation *
+                Quaternion.Euler(
+                    0.0f,
+                    180.0f,
+                    0.0f
+                );
         }
     }
 
 
-    /// <summary>
-    /// CourtChangeボタンから呼ぶ。
-    ///
-    /// Left <-> Right
-    ///
-    /// を切り替える。
-    ///
-    /// PlayRootを反転した後、
-    /// 現在存在するBallを削除して
-    /// 新しいServeStart位置へRespawnする。
-    /// </summary>
     public void ToggleCourt()
     {
         if (playRoot == null)
@@ -439,25 +798,13 @@ public class RallyController : MonoBehaviour
         }
 
 
-        // ========================================================
-        // Court Side切り替え
-        // ========================================================
+        currentCourtSide =
+            currentCourtSide ==
+            CourtSide.Left
 
-        if (currentCourtSide == CourtSide.Left)
-        {
-            currentCourtSide =
-                CourtSide.Right;
-        }
-        else
-        {
-            currentCourtSide =
-                CourtSide.Left;
-        }
+                ? CourtSide.Right
+                : CourtSide.Left;
 
-
-        // ========================================================
-        // PlayRootへ反映
-        // ========================================================
 
         ApplyCourtSide();
 
@@ -470,22 +817,18 @@ public class RallyController : MonoBehaviour
         );
 
 
-        // ========================================================
-        // 既存Ballは反転しないのでRespawn
-        //
-        // PlayRootを反転した後なので、
-        // ServeStart.positionも既に反対側になっている。
-        // ========================================================
-
-        SpawnBallAtSelectedStart();
+        ResetSelectedSimulation();
     }
 
 
     // ============================================================
-    // Spawn
+    // Generic Ball Spawn
     // ============================================================
 
-    public void SpawnBallAtSelectedStart()
+    private GameObject SpawnBallAtPoint(
+        Transform spawnPoint,
+        string label
+    )
     {
         if (ballSpawner == null)
         {
@@ -493,10 +836,105 @@ public class RallyController : MonoBehaviour
                 "[RallyController] BallSpawner が設定されていません。"
             );
 
+            return null;
+        }
+
+
+        if (spawnPoint == null)
+        {
+            Debug.LogError(
+                "[RallyController] Spawn Point がnullです。"
+            );
+
+            return null;
+        }
+
+
+        // 古いBallのEvent解除
+        UnbindCurrentBall();
+
+
+        GameObject newBall =
+            ballSpawner.RespawnBall(
+                spawnPoint
+            );
+
+
+        if (newBall == null)
+        {
+            return null;
+        }
+
+
+        currentBallPhysics =
+            newBall.GetComponent<VolleyballBallPhysics>();
+
+
+        if (currentBallPhysics == null)
+        {
+            Debug.LogError(
+                "[RallyController] " +
+                "Ball PrefabにVolleyballBallPhysicsがありません。"
+            );
+
+            return null;
+        }
+
+
+        BindCurrentBallEvents();
+
+
+        Debug.Log(
+            "[RallyController] Ball Spawn\n" +
+            $"Type = {label}\n" +
+            $"Court = {currentCourtSide}\n" +
+            $"Position = {spawnPoint.position}"
+        );
+
+
+        return newBall;
+    }
+
+
+    // ============================================================
+    // Event Binding
+    // ============================================================
+
+    private void BindCurrentBallEvents()
+    {
+        if (currentBallPhysics == null)
+        {
             return;
         }
 
 
+        currentBallPhysics.OnTossApex +=
+            HandleTossApex;
+
+
+        currentBallPhysics.OnServeHitPoint +=
+            HandleServeHitPoint;
+
+
+        currentBallPhysics.OnServeReachedTarget +=
+            HandleServeReachedTarget;
+
+
+        currentBallPhysics.OnReceiveReachedTarget +=
+            HandleReceiveReachedTarget;
+
+
+        currentBallPhysics.OnSetterTossReachedTarget +=
+            HandleSetterTossReachedTarget;
+    }
+
+
+    // ============================================================
+    // Serve Spawn
+    // ============================================================
+
+    public void SpawnBallAtSelectedStart()
+    {
         Transform spawnPoint =
             GetSelectedServeStart();
 
@@ -511,70 +949,65 @@ public class RallyController : MonoBehaviour
         }
 
 
-        // 古いBallとのイベント解除
-        UnbindCurrentBall();
+        SpawnBallAtPoint(
+            spawnPoint,
+            "Serve Start"
+        );
+    }
 
 
-        // ========================================================
-        // Respawn
-        // ========================================================
+    // ============================================================
+    // Receive Spawn
+    // ============================================================
 
-        GameObject newBall =
-            ballSpawner.RespawnBall(
-                spawnPoint
-            );
-
-
-        if (newBall == null)
-            return;
+    public void SpawnBallAtSelectedReceiver()
+    {
+        Transform receiver =
+            GetSelectedServeTarget();
 
 
-        // ========================================================
-        // Physics
-        // ========================================================
-
-        currentBallPhysics =
-            newBall.GetComponent<VolleyballBallPhysics>();
-
-
-        if (currentBallPhysics == null)
+        if (receiver == null)
         {
             Debug.LogError(
-                "[RallyController] " +
-                "Ball PrefabにVolleyballBallPhysicsがありません。"
+                "[RallyController] Receiver が設定されていません。"
             );
 
             return;
         }
 
 
-        // ========================================================
-        // Events
-        // ========================================================
-
-        currentBallPhysics.OnTossApex +=
-            HandleTossApex;
-
-
-        currentBallPhysics.OnServeHitPoint +=
-            HandleServeHitPoint;
-
-
-        currentBallPhysics.OnServeReachedTarget +=
-            HandleServeReachedTarget;
-
-
-        Debug.Log(
-            "[RallyController] Spawn\n" +
-            $"Court = {currentCourtSide}\n" +
-            $"Start = {selectedServeStart}\n" +
-            $"Position = {spawnPoint.position}"
+        SpawnBallAtPoint(
+            receiver,
+            "Receive Start"
         );
     }
 
 
     // ============================================================
-    // Serve Sequence Start
+    // Setter Spawn
+    // ============================================================
+
+    public void SpawnBallAtSetter()
+    {
+        if (setterPosition == null)
+        {
+            Debug.LogError(
+                "[RallyController] Setter Position が設定されていません。"
+            );
+
+            return;
+        }
+
+
+        SpawnBallAtPoint(
+            setterPosition,
+            "Setter Toss Start"
+        );
+    }
+
+
+    // ============================================================
+    // Serve Sequence
     // ============================================================
 
     public void StartSpikeServeSequence()
@@ -604,17 +1037,7 @@ public class RallyController : MonoBehaviour
 
 
         // ========================================================
-        // Toss方向
-        //
-        // 現在のBall
-        // →
-        // 選択されたReceiver
-        //
-        // のXZ方向
-        //
-        // PlayRoot反転後でも
-        // World Positionから計算するため
-        // 既存処理をそのまま使用できる。
+        // Toss Direction
         // ========================================================
 
         Vector3 tossDirection =
@@ -626,7 +1049,10 @@ public class RallyController : MonoBehaviour
             0.0f;
 
 
-        if (tossDirection.sqrMagnitude <= 0.0001f)
+        if (
+            tossDirection.sqrMagnitude <=
+            0.0001f
+        )
         {
             Debug.LogError(
                 "[RallyController] Toss Directionを計算できません。"
@@ -650,10 +1076,6 @@ public class RallyController : MonoBehaviour
         );
 
 
-        // ========================================================
-        // Toss
-        // ========================================================
-
         currentBallPhysics.TossUp(
             tossHeight,
             serveHitHeight,
@@ -664,39 +1086,112 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
-    // Apex
+    // Receive Sequence
     // ============================================================
 
-    /// <summary>
-    /// 最高点ではまだ打たない。
-    /// </summary>
-    private void HandleTossApex()
+    private void StartReceiveSequence()
     {
         if (currentBallPhysics == null)
+        {
             return;
+        }
+
+
+        if (setterPosition == null)
+        {
+            Debug.LogError(
+                "[RallyController] Setter Position が設定されていません。"
+            );
+
+            return;
+        }
+
+
+        currentBallPhysics.ReceiveToSetter(
+            setterPosition,
+            receiveApexHeight,
+            receiveBackspinRpm,
+            receiveContactFixedFrames
+        );
+    }
+
+
+    // ============================================================
+    // Setter Toss Sequence
+    // ============================================================
+
+    private void StartSetterTossSequence()
+    {
+        if (currentBallPhysics == null)
+        {
+            Debug.LogWarning(
+                "[RallyController] Ballがありません。"
+            );
+
+            return;
+        }
+
+
+        Transform target =
+            GetSelectedSetterTossTarget();
+
+
+        if (target == null)
+        {
+            Debug.LogError(
+                "[RallyController] " +
+                "Setter Toss Target が設定されていません。"
+            );
+
+            return;
+        }
 
 
         Debug.Log(
-            "[RallyController] Toss Apex\n" +
+            "[RallyController] Setter Toss Start\n" +
+            $"Setter Position = {currentBallPhysics.transform.position}\n" +
+            $"Toss Target = {target.name}\n" +
+            $"Target Position = {target.position}\n" +
+            $"Apex Height = {setterTossApexHeight:F3} m"
+        );
+
+
+        currentBallPhysics.SetterToss(
+            target,
+            setterTossApexHeight
+        );
+    }
+
+
+    // ============================================================
+    // Serve Toss Apex
+    // ============================================================
+
+    private void HandleTossApex()
+    {
+        if (currentBallPhysics == null)
+        {
+            return;
+        }
+
+
+        Debug.Log(
+            "[RallyController] Serve Toss Apex\n" +
             $"Position = {currentBallPhysics.transform.position}"
         );
     }
 
 
     // ============================================================
-    // Serve Hit Point
+    // Serve Hit
     // ============================================================
 
-    /// <summary>
-    /// 下降中にServe Hit Heightへ到達。
-    ///
-    /// この瞬間のReceiver Transformを取得し、
-    /// そのTransformを直接BallPhysicsへ渡す。
-    /// </summary>
     private void HandleServeHitPoint()
     {
         if (currentBallPhysics == null)
+        {
             return;
+        }
 
 
         Transform target =
@@ -724,13 +1219,6 @@ public class RallyController : MonoBehaviour
         );
 
 
-        // ========================================================
-        // Receiver Transformそのものを渡す。
-        //
-        // PlayRootが反転していれば
-        // target.positionも反転後のWorld座標になる。
-        // ========================================================
-
         currentBallPhysics.SpikeServe(
             target,
             serveSpeedKmh,
@@ -740,39 +1228,169 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
-    // Receiver Arrival
+    // Serve Completed
     // ============================================================
 
-    /// <summary>
-    /// BallがReceiver Transformへ到達した瞬間。
-    ///
-    /// 次の段階ではここから
-    /// Receive / Cutを開始する。
-    /// </summary>
     private void HandleServeReachedTarget()
     {
         if (currentBallPhysics == null)
+        {
             return;
+        }
 
 
-        Transform target =
+        Transform receiver =
             GetSelectedServeTarget();
 
 
         Debug.Log(
-            "[RallyController] Serve Reached Receiver\n" +
-            $"Receiver = {(target != null ? target.name : "null")}\n" +
+            "[RallyController] Serve Completed\n" +
+            $"Receiver = " +
+            $"{(receiver != null ? receiver.name : "null")}\n" +
             $"Ball Position = {currentBallPhysics.transform.position}"
         );
 
 
         // ========================================================
-        // 次の段階:
-        //
-        // currentBallPhysics.Receive(...);
-        //
-        // などをここから呼ぶ。
+        // Serveで終了
         // ========================================================
+
+        if (
+            !ShouldContinueAfter(
+                PlayPhase.Serve
+            )
+        )
+        {
+            Debug.Log(
+                "[RallyController] Simulation Finished at Serve."
+            );
+
+            return;
+        }
+
+
+        // ========================================================
+        // Serve -> Receive
+        // ========================================================
+
+        StartReceiveSequence();
+    }
+
+
+    // ============================================================
+    // Receive Completed
+    // ============================================================
+
+    private void HandleReceiveReachedTarget()
+    {
+        if (currentBallPhysics == null)
+        {
+            return;
+        }
+
+
+        Debug.Log(
+            "[RallyController] Receive Completed\n" +
+            $"Setter = " +
+            $"{(setterPosition != null ? setterPosition.name : "null")}\n" +
+            $"Ball Position = {currentBallPhysics.transform.position}"
+        );
+
+
+        // ========================================================
+        // Receiveで終了
+        // ========================================================
+
+        if (
+            !ShouldContinueAfter(
+                PlayPhase.Receive
+            )
+        )
+        {
+            Debug.Log(
+                "[RallyController] Simulation Finished at Receive."
+            );
+
+            return;
+        }
+
+
+        // ========================================================
+        // Receive -> Toss
+        // ========================================================
+
+        StartSetterTossSequence();
+    }
+
+
+    // ============================================================
+    // Setter Toss Target Passed
+    // ============================================================
+
+    private void HandleSetterTossReachedTarget()
+    {
+        if (currentBallPhysics == null)
+        {
+            return;
+        }
+
+
+        Transform target =
+            GetSelectedSetterTossTarget();
+
+
+        Debug.Log(
+            "[RallyController] Setter Toss Target Passed\n" +
+            $"Target = " +
+            $"{(target != null ? target.name : "null")}\n" +
+            $"Ball Position = {currentBallPhysics.transform.position}\n" +
+            $"Ball Velocity = {currentBallPhysics.Rigidbody.linearVelocity}"
+        );
+
+
+        // ========================================================
+        // Tossで終了
+        //
+        // Ballは止めない。
+        //
+        // Gravityでそのまま落下を続ける。
+        // ========================================================
+
+        if (
+            !ShouldContinueAfter(
+                PlayPhase.Toss
+            )
+        )
+        {
+            Debug.Log(
+                "[RallyController] " +
+                "Simulation Finished at Toss.\n" +
+                "Ball Physics continues."
+            );
+
+            return;
+        }
+
+
+        // ========================================================
+        // Toss -> Spike
+        // ========================================================
+
+        StartSpikeSequence();
+    }
+
+
+    // ============================================================
+    // Future : Spike
+    // ============================================================
+
+    private void StartSpikeSequence()
+    {
+        Debug.LogWarning(
+            "[RallyController] " +
+            "Spikeはまだ未実装です。\n" +
+            "Toss Target通過後もBallはGravityで運動を続けます。"
+        );
     }
 
 
@@ -780,7 +1398,9 @@ public class RallyController : MonoBehaviour
     // External Control
     // ============================================================
 
-    public void SetServeStart(int index)
+    public void SetServeStart(
+        int index
+    )
     {
         index =
             Mathf.Clamp(
@@ -795,15 +1415,22 @@ public class RallyController : MonoBehaviour
     }
 
 
-    public void SetServeStartAndRespawn(int index)
+    public void SetServeStartAndRespawn(
+        int index
+    )
     {
-        SetServeStart(index);
+        SetServeStart(
+            index
+        );
+
 
         SpawnBallAtSelectedStart();
     }
 
 
-    public void SetServeTarget(int index)
+    public void SetServeTarget(
+        int index
+    )
     {
         index =
             Mathf.Clamp(
@@ -818,7 +1445,9 @@ public class RallyController : MonoBehaviour
     }
 
 
-    public void SetServeSpeed(float speedKmh)
+    public void SetServeSpeed(
+        float speedKmh
+    )
     {
         serveSpeedKmh =
             Mathf.Max(
@@ -828,14 +1457,18 @@ public class RallyController : MonoBehaviour
     }
 
 
-    public void SetSpikeServeLaunchAngle(float angleDeg)
+    public void SetSpikeServeLaunchAngle(
+        float angleDeg
+    )
     {
         spikeServeLaunchAngle =
             angleDeg;
     }
 
 
-    public void SetTossHeight(float height)
+    public void SetTossHeight(
+        float height
+    )
     {
         tossHeight =
             Mathf.Max(
@@ -845,20 +1478,63 @@ public class RallyController : MonoBehaviour
     }
 
 
-    public void SetServeHitHeight(float height)
+    public void SetServeHitHeight(
+        float height
+    )
     {
         serveHitHeight =
             height;
     }
 
 
-    public void SetTossForwardDistance(float distance)
+    public void SetTossForwardDistance(
+        float distance
+    )
     {
         tossForwardDistance =
             Mathf.Max(
                 0.0f,
                 distance
             );
+    }
+
+
+    public void SetReceiveApexHeight(
+        float height
+    )
+    {
+        receiveApexHeight =
+            height;
+    }
+
+
+    public void SetReceiveBackspinRpm(
+        float rpm
+    )
+    {
+        receiveBackspinRpm =
+            rpm;
+    }
+
+
+    public void SetReceiveContactFixedFrames(
+        int frames
+    )
+    {
+        receiveContactFixedFrames =
+            Mathf.Max(
+                0,
+                frames
+            );
+    }
+
+
+    public void SetSetterTossApexHeight(
+        float height
+    )
+    {
+        setterTossApexHeight =
+            height;
     }
 
 
@@ -923,13 +1599,43 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
+    // Setter Toss Target Selection
+    // ============================================================
+
+    /// <summary>
+    /// 現在は単一のSetter Toss Targetを返す。
+    ///
+    /// 将来的にはここで、
+    ///
+    /// Toss Side:
+    ///     Left / Right
+    ///
+    /// Toss Length:
+    ///     Short / Normal / Long
+    ///
+    /// Target Offset:
+    ///     X / Y / Z微調整
+    ///
+    /// などを判断してTargetを決定する。
+    ///
+    /// VolleyballBallPhysics側は変更不要。
+    /// </summary>
+    private Transform GetSelectedSetterTossTarget()
+    {
+        return setterTossTarget;
+    }
+
+
+    // ============================================================
     // Event Cleanup
     // ============================================================
 
     private void UnbindCurrentBall()
     {
         if (currentBallPhysics == null)
+        {
             return;
+        }
 
 
         currentBallPhysics.OnTossApex -=
@@ -942,6 +1648,14 @@ public class RallyController : MonoBehaviour
 
         currentBallPhysics.OnServeReachedTarget -=
             HandleServeReachedTarget;
+
+
+        currentBallPhysics.OnReceiveReachedTarget -=
+            HandleReceiveReachedTarget;
+
+
+        currentBallPhysics.OnSetterTossReachedTarget -=
+            HandleSetterTossReachedTarget;
 
 
         currentBallPhysics =
