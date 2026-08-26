@@ -16,12 +16,9 @@ public class ImageController : MonoBehaviour
 
 
     [Header("Preview Materials")]
-
-    [Tooltip("UIのLeft RawImageに使用するMaterial")]
     [SerializeField]
     private Material leftPreviewMaterial;
 
-    [Tooltip("UIのRight RawImageに使用するMaterial")]
     [SerializeField]
     private Material rightPreviewMaterial;
 
@@ -31,12 +28,9 @@ public class ImageController : MonoBehaviour
     // =========================================================
 
     [Header("Preview RawImages")]
-
-    [Tooltip("左目映像確認用のRawImage")]
     [SerializeField]
     private RawImage leftPreviewRawImage;
 
-    [Tooltip("右目映像確認用のRawImage")]
     [SerializeField]
     private RawImage rightPreviewRawImage;
 
@@ -81,6 +75,48 @@ public class ImageController : MonoBehaviour
 
     [SerializeField]
     private Camera rightCamera;
+
+
+    // =========================================================
+    // Polar / Orbit Camera
+    // =========================================================
+
+    [Header("Polar / Orbit Camera")]
+
+    [Tooltip(
+        "極座標の中心。\n" +
+        "ネット中心に配置したTransformを指定してください。"
+    )]
+    [SerializeField]
+    private Transform orbitCenter;
+
+
+    [Tooltip(
+        "ネット中心からStereoCameraまでの距離 r [Unity Unit]"
+    )]
+    [Min(0.001f)]
+    public float orbitRadius = 10.0f;
+
+
+    [Tooltip(
+        "ネット中心から見た仰角 Theta [deg]\n" +
+        "0° = ネット中心と同じ高さ\n" +
+        "正 = ネット中心より上"
+    )]
+    public float orbitThetaDeg = 0.0f;
+
+
+    /*
+     * Thetaを変更するときの円軌道の向き。
+     *
+     * ユーザーが直接操作する値ではない。
+     *
+     * 現在のCameraとNetCenterのXZ方向から
+     * 自動的に求める。
+     */
+    private float orbitAzimuthDeg = 180.0f;
+
+    private bool orbitInitialized;
 
 
     // =========================================================
@@ -168,16 +204,13 @@ public class ImageController : MonoBehaviour
         stereoCameraRoot =
             transform;
 
-
         stereoCameraPosition =
             transform.localPosition;
-
 
         stereoCameraRotationX =
             NormalizeAngle(
                 transform.localEulerAngles.x
             );
-
 
         stereoCameraRotationY =
             NormalizeAngle(
@@ -189,6 +222,20 @@ public class ImageController : MonoBehaviour
     private void Awake()
     {
         CacheOriginalCameraSettings();
+
+        /*
+         * Inspector上のXYZ/Pitch/Yawを
+         * まずTransformへ反映する。
+         */
+        ApplyStereoCameraTransform();
+
+        /*
+         * 現在のXYZから
+         * r / Thetaを初期化する。
+         *
+         * AwakeなのでUIController.Startより先に実行される。
+         */
+        SynchronizePolarFromCartesian();
     }
 
 
@@ -286,20 +333,12 @@ public class ImageController : MonoBehaviour
         }
 
 
-        // -----------------------------------------------------
-        // Left
-        // -----------------------------------------------------
-
         leftGuardTexture =
             CreateGuardTexture(
                 originalLeftTexture,
                 "LeftEye_GuardBand"
             );
 
-
-        // -----------------------------------------------------
-        // Right
-        // -----------------------------------------------------
 
         rightGuardTexture =
             CreateGuardTexture(
@@ -439,10 +478,6 @@ public class ImageController : MonoBehaviour
 
     private void ApplyTexturesToMaterials()
     {
-        // -----------------------------------------------------
-        // Main Display
-        // -----------------------------------------------------
-
         if (leftMaterial != null &&
             leftGuardTexture != null)
         {
@@ -463,10 +498,6 @@ public class ImageController : MonoBehaviour
         }
 
 
-        // -----------------------------------------------------
-        // Preview Materials
-        // -----------------------------------------------------
-
         if (leftPreviewMaterial != null &&
             leftGuardTexture != null)
         {
@@ -486,10 +517,6 @@ public class ImageController : MonoBehaviour
             );
         }
 
-
-        // -----------------------------------------------------
-        // Preview RawImages
-        // -----------------------------------------------------
 
         if (leftPreviewRawImage != null &&
             leftGuardTexture != null)
@@ -604,10 +631,6 @@ public class ImageController : MonoBehaviour
 
     private void ApplyImageShift()
     {
-        // -----------------------------------------------------
-        // Main Display
-        // -----------------------------------------------------
-
         ApplyShiftToMaterial(
             leftMaterial,
             shiftPixels
@@ -619,10 +642,6 @@ public class ImageController : MonoBehaviour
             -shiftPixels
         );
 
-
-        // -----------------------------------------------------
-        // Preview
-        // -----------------------------------------------------
 
         ApplyShiftToMaterial(
             leftPreviewMaterial,
@@ -680,10 +699,6 @@ public class ImageController : MonoBehaviour
             0.001f;
 
 
-        // -----------------------------------------------------
-        // Left
-        // -----------------------------------------------------
-
         Vector3 leftPosition =
             leftCamera
                 .transform
@@ -699,10 +714,6 @@ public class ImageController : MonoBehaviour
             .localPosition =
                 leftPosition;
 
-
-        // -----------------------------------------------------
-        // Right
-        // -----------------------------------------------------
 
         Vector3 rightPosition =
             rightCamera
@@ -765,21 +776,9 @@ public class ImageController : MonoBehaviour
         }
 
 
-        // -----------------------------------------------------
-        // Position
-        // -----------------------------------------------------
-
         stereoCameraRoot.localPosition =
             stereoCameraPosition;
 
-
-        // -----------------------------------------------------
-        // Rotation
-        //
-        // X = Pitch
-        // Y = Yaw / Court Side
-        // Z = 現在値を維持
-        // -----------------------------------------------------
 
         Vector3 currentEulerAngles =
             stereoCameraRoot
@@ -800,26 +799,449 @@ public class ImageController : MonoBehaviour
 
 
     // =========================================================
-    // Court Change
+    // Cartesian Position Control
     // =========================================================
 
     /// <summary>
-    /// StereoCameraを反対側のコートへ移動する。
+    /// XYZ UI用。
     ///
-    /// Position Z:
-    /// z -> -z
+    /// XYZ位置を変更したあと、
+    /// その位置からr / Thetaを再計算する。
     ///
-    /// Rotation Y:
-    /// y -> y + 180°
-    ///
-    /// もう一度呼ぶと元に戻る。
+    /// XYZ操作ではLookAtは行わないため、
+    /// 従来通りPitchを個別に操作できる。
     /// </summary>
+    public void SetStereoCameraPosition(
+        Vector3 localPosition
+    )
+    {
+        stereoCameraPosition =
+            localPosition;
+
+
+        ApplyStereoCameraTransform();
+
+
+        SynchronizePolarFromCartesian();
+    }
+
+
+    /// <summary>
+    /// Pitch UI用。
+    /// </summary>
+    public void SetStereoCameraPitch(
+        float pitchDeg
+    )
+    {
+        stereoCameraRotationX =
+            pitchDeg;
+
+
+        ApplyStereoCameraTransform();
+    }
+
+
+    // =========================================================
+    // Polar Coordinate Control
+    // =========================================================
+
+    /// <summary>
+    /// 半径 r を変更。
+    ///
+    /// Thetaと軌道方向を維持したまま
+    /// ネット中心からの距離だけ変更する。
+    /// </summary>
+    public void SetOrbitRadius(
+        float radius
+    )
+    {
+        if (!EnsureOrbitInitialized())
+        {
+            return;
+        }
+
+
+        orbitRadius =
+            Mathf.Max(
+                0.001f,
+                radius
+            );
+
+
+        ApplyPolarToStereoCamera();
+    }
+
+
+    /// <summary>
+    /// Thetaを変更。
+    ///
+    /// r一定なので
+    /// ネット中心を中心とした円軌道を移動する。
+    /// </summary>
+    public void SetOrbitTheta(
+        float thetaDeg
+    )
+    {
+        if (!EnsureOrbitInitialized())
+        {
+            return;
+        }
+
+
+        orbitThetaDeg =
+            NormalizeAngle(
+                thetaDeg
+            );
+
+
+        ApplyPolarToStereoCamera();
+    }
+
+
+    /// <summary>
+    /// 現在のXYZ位置から
+    ///
+    /// r
+    /// Theta
+    /// Azimuth
+    ///
+    /// を計算する。
+    /// </summary>
+    public void SynchronizePolarFromCartesian()
+    {
+        if (stereoCameraRoot == null ||
+            orbitCenter == null)
+        {
+            orbitInitialized =
+                false;
+
+            return;
+        }
+
+
+        Vector3 cameraWorldPosition =
+            stereoCameraRoot.position;
+
+
+        Vector3 offset =
+            cameraWorldPosition -
+            orbitCenter.position;
+
+
+        float radius =
+            offset.magnitude;
+
+
+        if (radius <= 0.000001f)
+        {
+            orbitRadius =
+                0.001f;
+
+            orbitThetaDeg =
+                0.0f;
+
+            orbitInitialized =
+                true;
+
+            return;
+        }
+
+
+        // -----------------------------
+        // r
+        // -----------------------------
+
+        orbitRadius =
+            radius;
+
+
+        // -----------------------------
+        // 水平方向距離
+        // -----------------------------
+
+        float horizontalDistance =
+            new Vector2(
+                offset.x,
+                offset.z
+            ).magnitude;
+
+
+        // -----------------------------
+        // Theta
+        //
+        // atan2(
+        //     高さ差,
+        //     水平距離
+        // )
+        // -----------------------------
+
+        orbitThetaDeg =
+            Mathf.Atan2(
+                offset.y,
+                horizontalDistance
+            ) *
+            Mathf.Rad2Deg;
+
+
+        // -----------------------------
+        // Azimuth
+        //
+        // Thetaを動かすときに
+        // どの縦平面を円軌道にするか。
+        //
+        // 現在のCameraのXZ方向を使う。
+        // -----------------------------
+
+        if (horizontalDistance >
+            0.000001f)
+        {
+            orbitAzimuthDeg =
+                Mathf.Atan2(
+                    offset.x,
+                    offset.z
+                ) *
+                Mathf.Rad2Deg;
+        }
+
+
+        orbitInitialized =
+            true;
+    }
+
+
+    /// <summary>
+    /// r / Thetaから
+    /// StereoCameraのXYZ位置を計算する。
+    /// </summary>
+    private void ApplyPolarToStereoCamera()
+    {
+        if (stereoCameraRoot == null ||
+            orbitCenter == null)
+        {
+            return;
+        }
+
+
+        float radius =
+            Mathf.Max(
+                orbitRadius,
+                0.001f
+            );
+
+
+        float thetaRad =
+            orbitThetaDeg *
+            Mathf.Deg2Rad;
+
+
+        float azimuthRad =
+            orbitAzimuthDeg *
+            Mathf.Deg2Rad;
+
+
+        /*
+         * rを水平成分と垂直成分に分解
+         *
+         * horizontal = r cosθ
+         * vertical   = r sinθ
+         */
+
+        float horizontalRadius =
+            radius *
+            Mathf.Cos(
+                thetaRad
+            );
+
+
+        float verticalOffset =
+            radius *
+            Mathf.Sin(
+                thetaRad
+            );
+
+
+        /*
+         * 水平成分を
+         * X / Zへ分解する。
+         */
+
+        Vector3 offset =
+            new Vector3(
+
+                horizontalRadius *
+                Mathf.Sin(
+                    azimuthRad
+                ),
+
+                verticalOffset,
+
+                horizontalRadius *
+                Mathf.Cos(
+                    azimuthRad
+                )
+            );
+
+
+        Vector3 targetWorldPosition =
+            orbitCenter.position +
+            offset;
+
+
+        // -----------------------------
+        // Camera移動
+        // -----------------------------
+
+        stereoCameraRoot.position =
+            targetWorldPosition;
+
+
+        /*
+         * 既存のXYZ UIなどは
+         * localPositionを使用しているので同期。
+         */
+
+        stereoCameraPosition =
+            stereoCameraRoot.localPosition;
+
+
+        // -----------------------------
+        // 光軸をネット中心へ向ける
+        // -----------------------------
+
+        LookAtOrbitCenter();
+
+
+        orbitInitialized =
+            true;
+    }
+
+
+    // =========================================================
+    // Look At Net Center
+    // =========================================================
+
+    private void LookAtOrbitCenter()
+    {
+        if (stereoCameraRoot == null ||
+            orbitCenter == null)
+        {
+            return;
+        }
+
+
+        Vector3 direction =
+            orbitCenter.position -
+            stereoCameraRoot.position;
+
+
+        if (direction.sqrMagnitude <=
+            0.00000001f)
+        {
+            return;
+        }
+
+
+        Vector3 forward =
+            direction.normalized;
+
+
+        Vector3 up =
+            Vector3.up;
+
+
+        /*
+         * CameraがNetCenterの真上/真下付近に来ると
+         * forwardとVector3.upがほぼ平行になる。
+         *
+         * LookRotationが不安定になるのを避ける。
+         */
+
+        if (Mathf.Abs(
+            Vector3.Dot(
+                forward,
+                up
+            )
+        ) > 0.999f)
+        {
+            up =
+                Vector3.forward;
+        }
+
+
+        stereoCameraRoot.rotation =
+            Quaternion.LookRotation(
+                forward,
+                up
+            );
+
+
+        /*
+         * LookRotationで決まった回転を
+         * 既存Pitch / Yawパラメータへ同期。
+         */
+
+        Vector3 localEuler =
+            stereoCameraRoot.localEulerAngles;
+
+
+        stereoCameraRotationX =
+            NormalizeAngle(
+                localEuler.x
+            );
+
+
+        stereoCameraRotationY =
+            NormalizeAngle(
+                localEuler.y
+            );
+    }
+
+
+    // =========================================================
+    // Orbit initialization
+    // =========================================================
+
+    private bool EnsureOrbitInitialized()
+    {
+        if (stereoCameraRoot == null)
+        {
+            Debug.LogWarning(
+                "Stereo Camera Root が設定されていません。",
+                this
+            );
+
+            return false;
+        }
+
+
+        if (orbitCenter == null)
+        {
+            Debug.LogWarning(
+                "Polar / Orbit Camera の Orbit Center に" +
+                "ネット中心Transformを設定してください。",
+                this
+            );
+
+            return false;
+        }
+
+
+        if (!orbitInitialized)
+        {
+            SynchronizePolarFromCartesian();
+        }
+
+
+        return orbitInitialized;
+    }
+
+
+    // =========================================================
+    // Court Change
+    // =========================================================
+
     public void ToggleCourt()
     {
-        // -----------------------------------------------------
-        // Z座標反転
-        // -----------------------------------------------------
-
         Vector3 position =
             stereoCameraPosition;
 
@@ -832,10 +1254,6 @@ public class ImageController : MonoBehaviour
             position;
 
 
-        // -----------------------------------------------------
-        // Y回転 180°
-        // -----------------------------------------------------
-
         stereoCameraRotationY =
             NormalizeAngle(
                 stereoCameraRotationY +
@@ -843,11 +1261,11 @@ public class ImageController : MonoBehaviour
             );
 
 
-        // -----------------------------------------------------
-        // 即時反映
-        // -----------------------------------------------------
-
         ApplyStereoCameraTransform();
+
+
+        // XYZ変更後なので極座標も同期
+        SynchronizePolarFromCartesian();
 
 
         Debug.Log(

@@ -15,7 +15,6 @@ public class UIController : MonoBehaviour
     [SerializeField]
     private ImageController imageController;
 
-
     [SerializeField]
     private RallyController rallyController;
 
@@ -142,6 +141,32 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
+    // Radius r
+    // =========================================================
+
+    [Header("Polar Radius r UI")]
+
+    [SerializeField]
+    private Slider radiusSlider;
+
+    [SerializeField]
+    private TMP_InputField radiusInputField;
+
+
+    // =========================================================
+    // Theta
+    // =========================================================
+
+    [Header("Polar Theta UI")]
+
+    [SerializeField]
+    private Slider thetaSlider;
+
+    [SerializeField]
+    private TMP_InputField thetaInputField;
+
+
+    // =========================================================
     // Slider Range
     // =========================================================
 
@@ -167,6 +192,21 @@ public class UIController : MonoBehaviour
     private float pitchMax = 60.0f;
 
 
+    /*
+     * 現在のプロジェクトでは
+     * 1 Unity Unit = 1 m想定。
+     */
+    private float radiusMin = 0.1f;
+    private float radiusMax = 100.0f;
+
+
+    /*
+     * NetCenterから見た仰角。
+     */
+    private float thetaMin = -89.0f;
+    private float thetaMax = 89.0f;
+
+
     // =========================================================
     // Internal
     // =========================================================
@@ -188,7 +228,9 @@ public class UIController : MonoBehaviour
             );
 
 
-            enabled = false;
+            enabled =
+                false;
+
 
             return;
         }
@@ -207,6 +249,10 @@ public class UIController : MonoBehaviour
         BindPositionZ();
 
         BindPitch();
+
+        BindRadius();
+
+        BindTheta();
 
         BindCourtChange();
 
@@ -253,7 +299,9 @@ public class UIController : MonoBehaviour
 
             value =>
                 imageController.shiftPixels =
-                    Mathf.RoundToInt(value),
+                    Mathf.RoundToInt(
+                        value
+                    ),
 
             shiftMin,
             shiftMax,
@@ -341,8 +389,16 @@ public class UIController : MonoBehaviour
 
 
                 imageController
-                    .stereoCameraPosition =
-                        position;
+                    .SetStereoCameraPosition(
+                        position
+                    );
+
+
+                /*
+                 * XYZ変更によりr / Thetaも変わるので
+                 * 極座標UIへ即時反映。
+                 */
+                RefreshPolarControlsFromController();
             },
 
             positionXMin,
@@ -379,8 +435,12 @@ public class UIController : MonoBehaviour
 
 
                 imageController
-                    .stereoCameraPosition =
-                        position;
+                    .SetStereoCameraPosition(
+                        position
+                    );
+
+
+                RefreshPolarControlsFromController();
             },
 
             positionYMin,
@@ -417,8 +477,12 @@ public class UIController : MonoBehaviour
 
 
                 imageController
-                    .stereoCameraPosition =
-                        position;
+                    .SetStereoCameraPosition(
+                        position
+                    );
+
+
+                RefreshPolarControlsFromController();
             },
 
             positionZMin,
@@ -445,11 +509,86 @@ public class UIController : MonoBehaviour
 
             value =>
                 imageController
-                    .stereoCameraRotationX =
-                        value,
+                    .SetStereoCameraPitch(
+                        value
+                    ),
 
             pitchMin,
             pitchMax,
+
+            "F1"
+        );
+    }
+
+
+    // =========================================================
+    // Radius r
+    // =========================================================
+
+    private void BindRadius()
+    {
+        BindParameter(
+            radiusSlider,
+            radiusInputField,
+
+            () =>
+                imageController
+                    .orbitRadius,
+
+            value =>
+            {
+                imageController
+                    .SetOrbitRadius(
+                        value
+                    );
+
+
+                /*
+                 * r操作により
+                 * XYZとPitchが変更される。
+                 */
+                RefreshCartesianCameraControlsFromController();
+            },
+
+            radiusMin,
+            radiusMax,
+
+            "F3"
+        );
+    }
+
+
+    // =========================================================
+    // Theta
+    // =========================================================
+
+    private void BindTheta()
+    {
+        BindParameter(
+            thetaSlider,
+            thetaInputField,
+
+            () =>
+                imageController
+                    .orbitThetaDeg,
+
+            value =>
+            {
+                imageController
+                    .SetOrbitTheta(
+                        value
+                    );
+
+
+                /*
+                 * Theta操作により
+                 * XYZとPitchが変更される。
+                 */
+                RefreshCartesianCameraControlsFromController();
+            },
+
+            thetaMin,
+            thetaMax,
 
             "F1"
         );
@@ -500,22 +639,6 @@ public class UIController : MonoBehaviour
         }
 
 
-        // =====================================================
-        // RallyController側で
-        //
-        // PlayRoot
-        //
-        // Left
-        //     基準Rotation
-        //
-        // Right
-        //     Y + 180°
-        //
-        // を切り替える。
-        //
-        // StereoCameraには触らない。
-        // =====================================================
-
         rallyController.ToggleCourt();
     }
 
@@ -555,8 +678,13 @@ public class UIController : MonoBehaviour
         inputField.contentType =
             wholeNumbers
 
-                ? TMP_InputField.ContentType.IntegerNumber
-                : TMP_InputField.ContentType.DecimalNumber;
+                ? TMP_InputField
+                    .ContentType
+                    .IntegerNumber
+
+                : TMP_InputField
+                    .ContentType
+                    .DecimalNumber;
 
 
         float initialValue =
@@ -712,9 +840,7 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
-    // ParameterManager用
-    //
-    // Reset / Load後にも使用
+    // ParameterManager
     // =========================================================
 
     public void RefreshFromController()
@@ -723,6 +849,14 @@ public class UIController : MonoBehaviour
         {
             return;
         }
+
+
+        /*
+         * Reset / LoadなどでXYZが変化している可能性があるので、
+         * XYZから極座標も再計算。
+         */
+        imageController
+            .SynchronizePolarFromCartesian();
 
 
         RefreshParameter(
@@ -786,7 +920,103 @@ public class UIController : MonoBehaviour
         );
 
 
+        RefreshParameter(
+            radiusSlider,
+            radiusInputField,
+            imageController
+                .orbitRadius,
+            "F3"
+        );
+
+
+        RefreshParameter(
+            thetaSlider,
+            thetaInputField,
+            imageController
+                .orbitThetaDeg,
+            "F1"
+        );
+
+
         UpdateOutputText();
+    }
+
+
+    // =========================================================
+    // Dependent Camera UI synchronization
+    // =========================================================
+
+    private void RefreshPolarControlsFromController()
+    {
+        if (imageController == null)
+        {
+            return;
+        }
+
+
+        RefreshParameter(
+            radiusSlider,
+            radiusInputField,
+            imageController
+                .orbitRadius,
+            "F3"
+        );
+
+
+        RefreshParameter(
+            thetaSlider,
+            thetaInputField,
+            imageController
+                .orbitThetaDeg,
+            "F1"
+        );
+    }
+
+
+    private void RefreshCartesianCameraControlsFromController()
+    {
+        if (imageController == null)
+        {
+            return;
+        }
+
+
+        Vector3 position =
+            imageController
+                .stereoCameraPosition;
+
+
+        RefreshParameter(
+            positionXSlider,
+            positionXInputField,
+            position.x,
+            "F3"
+        );
+
+
+        RefreshParameter(
+            positionYSlider,
+            positionYInputField,
+            position.y,
+            "F3"
+        );
+
+
+        RefreshParameter(
+            positionZSlider,
+            positionZInputField,
+            position.z,
+            "F3"
+        );
+
+
+        RefreshParameter(
+            pitchSlider,
+            pitchInputField,
+            imageController
+                .stereoCameraRotationX,
+            "F1"
+        );
     }
 
 
@@ -1093,10 +1323,6 @@ public class UIController : MonoBehaviour
                 .stereoCameraPosition;
 
 
-        // =====================================================
-        // Camera / Image Parameters
-        // =====================================================
-
         string text =
 
             "<b>Image Parameters</b>\n" +
@@ -1127,7 +1353,14 @@ public class UIController : MonoBehaviour
 
             $"Pitch : " +
             $"{imageController.stereoCameraRotationX:F1}" +
-            "\u00B0\n\n";
+            "°\n" +
+
+            $"Orbit Radius r : " +
+            $"{imageController.orbitRadius:F3} m\n" +
+
+            $"Orbit Theta : " +
+            $"{imageController.orbitThetaDeg:F1}" +
+            "°\n\n";
 
 
         // =====================================================
