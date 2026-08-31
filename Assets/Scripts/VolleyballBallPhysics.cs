@@ -14,8 +14,13 @@ using UnityEngine;
 /// Setter TossのTarget
 /// = Spike Contact Point
 ///
-/// Spike打球後はTargetへの強制移動を行わず、
+/// BlockなしのSpike打球後はTargetへの毎Frame強制移動を行わず、
 /// Rigidbody Physicsに任せる。
+///
+/// Blockありの場合は、高速なSpikeがBlock Contact Pointを通り越してから戻る見え方を防ぐため、
+/// Spike Contact Point -> Block Contact PointだけをKinematic + 解析弾道で正確に再生する。
+/// Contact Point到達時に一度完全停止し、Receive Contactと同様に指定FixedUpdate数だけ保持する。
+/// その後、指定Block Exit Speed / Block SpinでBlock Landing Pointを通る弾道へ切り替える。
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class VolleyballBallPhysics : MonoBehaviour
@@ -40,6 +45,8 @@ public class VolleyballBallPhysics : MonoBehaviour
         AtSetTarget,
 
         Spiking,
+        BlockContact,
+        BlockLanding,
         AfterSpikeTarget
     }
 
@@ -241,6 +248,77 @@ public class VolleyballBallPhysics : MonoBehaviour
 
 
     // ============================================================
+    // Block Runtime
+    // ============================================================
+
+    [Header("Block Runtime")]
+
+    [SerializeField]
+    private bool blockEnabledForCurrentSpike =
+        false;
+
+    [SerializeField]
+    private Vector3 blockContactPointPositionAtLaunch;
+
+    [SerializeField]
+    private Vector3 blockLandingPointPositionAtLaunch;
+
+    [SerializeField]
+    private float currentBlockExitSpeedKmh =
+        45.0f;
+
+    [SerializeField]
+    private float currentBlockSpinRpm =
+        600.0f;
+
+    [SerializeField]
+    private int currentBlockContactFixedFrames =
+        1;
+
+    [SerializeField]
+    private int blockContactFramesRemaining =
+        0;
+
+    [SerializeField]
+    private bool blockContactTriggered =
+        false;
+
+    [SerializeField]
+    private bool blockLandingTriggered =
+        false;
+
+    [SerializeField]
+    private float calculatedBlockLandingFlightTime =
+        0.0f;
+
+    [SerializeField]
+    private float blockLandingElapsedTime =
+        0.0f;
+
+    [SerializeField]
+    private Vector3 blockLandingLaunchVelocity;
+
+    [SerializeField]
+    private Vector3 blockLandingArrivalVelocity;
+
+    [SerializeField]
+    private bool blockContactPending =
+        false;
+
+    [SerializeField]
+    private Vector3 blockApproachSpinAxis =
+        Vector3.right;
+
+    [SerializeField]
+    private float blockApproachSpinDegreesPerSecond =
+        0.0f;
+
+    private Transform currentBlockContactPoint;
+
+    private Transform currentBlockLandingPoint;
+
+
+    // ============================================================
     // Internal
     // ============================================================
 
@@ -273,16 +351,8 @@ public class VolleyballBallPhysics : MonoBehaviour
 
     public event Action OnReceiveReachedTarget;
 
-    /// <summary>
-    /// Setter TossがToss Targetへ到達。
-    /// この位置がSpike Contact Point。
-    /// </summary>
     public event Action OnSetReachedTarget;
 
-    /// <summary>
-    /// SpikeがSpikeTarget付近を通過。
-    /// Ballは停止しない。
-    /// </summary>
     public event Action OnSpikeReachedTarget;
 
 
@@ -319,7 +389,6 @@ public class VolleyballBallPhysics : MonoBehaviour
             return;
         }
 
-        // Receive接触
         if (
             currentState ==
             BallMotionState.ReceiveContact
@@ -333,13 +402,43 @@ public class VolleyballBallPhysics : MonoBehaviour
             return;
         }
 
-        // Setter接触
         if (
             currentState ==
             BallMotionState.SetContact
         )
         {
             UpdateSetContact();
+
+            previousPosition =
+                rb.position;
+
+            return;
+        }
+
+        if (
+            currentState ==
+            BallMotionState.BlockContact
+        )
+        {
+            UpdateBlockContact();
+
+            previousPosition =
+                rb.position;
+
+            return;
+        }
+
+        /*
+         * Block ON時だけ、
+         * Spike Contact -> Block ContactはKinematicで正確に進める。
+         */
+        if (
+            currentState ==
+            BallMotionState.Spiking &&
+            blockEnabledForCurrentSpike
+        )
+        {
+            UpdateBlockApproach();
 
             previousPosition =
                 rb.position;
@@ -395,6 +494,14 @@ public class VolleyballBallPhysics : MonoBehaviour
             UpdateSpike();
         }
 
+        if (
+            currentState ==
+            BallMotionState.BlockLanding
+        )
+        {
+            UpdateBlockLanding();
+        }
+
         previousPosition =
             rb.position;
     }
@@ -442,9 +549,6 @@ public class VolleyballBallPhysics : MonoBehaviour
     // Place
     // ============================================================
 
-    /// <summary>
-    /// Ballを指定World Positionへ置いてWaitingで保持する。
-    /// </summary>
     public void PlaceAt(
         Vector3 position
     )
@@ -936,9 +1040,6 @@ public class VolleyballBallPhysics : MonoBehaviour
         additionalVerticalAcceleration =
             0.0f;
 
-        // TargetへSnapしない。
-        // StopPhysicsしない。
-        // 到達イベントだけ発生させる。
         currentState =
             BallMotionState.AtServeTarget;
 
@@ -1243,14 +1344,6 @@ public class VolleyballBallPhysics : MonoBehaviour
     // Setter Toss
     // ============================================================
 
-    /// <summary>
-    /// Setterから指定World Positionへトスする。
-    ///
-    /// targetPositionは
-    /// LeftTossTarget / RightTossTarget
-    /// + Z Offset
-    /// の最終的なSpike Contact Point。
-    /// </summary>
     public void SetToTarget(
         Vector3 targetPosition,
         float setApexHeight,
@@ -1455,7 +1548,6 @@ public class VolleyballBallPhysics : MonoBehaviour
         rb.linearVelocity =
             setVelocity;
 
-        // Setの回転
         if (
             horizontalVector.sqrMagnitude >
             0.0001f
@@ -1526,8 +1618,6 @@ public class VolleyballBallPhysics : MonoBehaviour
 
     private void CompleteSetAtTarget()
     {
-        // ここがSpike Contact Pointなので
-        // 最後のFixedUpdate誤差だけ補正する。
         rb.position =
             setTargetPositionAtLaunch;
 
@@ -1546,7 +1636,7 @@ public class VolleyballBallPhysics : MonoBehaviour
 
 
     // ============================================================
-    // Spike
+    // Normal Spike
     // ============================================================
 
     public void Spike(
@@ -1636,61 +1726,25 @@ public class VolleyballBallPhysics : MonoBehaviour
         spikeTargetTriggered =
             false;
 
+        ResetBlockRuntime();
+
         ActivatePhysics();
 
         rb.linearVelocity =
             launchVelocity;
 
-        Vector3 horizontalDirection =
-            launchVelocity;
-
-        horizontalDirection.y =
-            0.0f;
-
-        if (
-            horizontalDirection.sqrMagnitude >
-            0.0001f
-        )
-        {
-            horizontalDirection.Normalize();
-
-            Vector3 lateralAxis =
-                Vector3.Cross(
-                    Vector3.up,
-                    horizontalDirection
-                ).normalized;
-
-            float angularSpeed =
-                spikeSpinRpm *
-                2.0f *
-                Mathf.PI /
-                60.0f;
-
-            rb.angularVelocity =
-                -lateralAxis *
-                angularSpeed;
-        }
-        else
-        {
-            rb.angularVelocity =
-                Vector3.zero;
-        }
+        ApplySpinForVelocity(
+            launchVelocity,
+            spikeSpinRpm
+        );
 
         currentState =
             BallMotionState.Spiking;
 
-        float horizontalSpeed =
-            new Vector2(
-                launchVelocity.x,
-                launchVelocity.z
-            ).magnitude;
-
         float launchAngle =
-            Mathf.Atan2(
-                launchVelocity.y,
-                horizontalSpeed
-            ) *
-            Mathf.Rad2Deg;
+            CalculateLaunchAngleDeg(
+                launchVelocity
+            );
 
         Debug.Log(
             "[Ball] Spike\n" +
@@ -1698,15 +1752,256 @@ public class VolleyballBallPhysics : MonoBehaviour
             $"Target = {targetTransform.name}\n" +
             $"Target Position = {target}\n" +
             $"Speed = {speedKmh:F1} km/h\n" +
-            $"Launch Angle = {launchAngle:F2} deg"
+            $"Launch Angle = {launchAngle:F2} deg\n" +
+            "Block Enabled = False"
         );
     }
 
+
+    // ============================================================
+    // Block Spike
+    // ============================================================
+
+    public void SpikeWithBlock(
+        Transform blockContactPoint,
+        Transform blockLandingPoint,
+        float spikeSpeedKmh,
+        float blockExitSpeedKmh,
+        float blockSpinRpm,
+        int blockContactFixedFrames = 1
+    )
+    {
+        if (blockContactPoint == null)
+        {
+            Debug.LogError(
+                "[Ball] Block Contact Point がnullです。"
+            );
+
+            return;
+        }
+
+        if (blockLandingPoint == null)
+        {
+            Debug.LogError(
+                "[Ball] Block Landing Point がnullです。"
+            );
+
+            return;
+        }
+
+        if (
+            currentState != BallMotionState.AtSetTarget &&
+            currentState != BallMotionState.Waiting
+        )
+        {
+            Debug.LogWarning(
+                "[Ball] 現在のStateではBlock Spikeを開始できません。\n" +
+                $"State = {currentState}"
+            );
+
+            return;
+        }
+
+        if (spikeSpeedKmh <= 0.0f)
+        {
+            Debug.LogError(
+                "[Ball] Spike Speed は0より大きくしてください。"
+            );
+
+            return;
+        }
+
+        if (blockExitSpeedKmh <= 0.0f)
+        {
+            Debug.LogError(
+                "[Ball] Block Exit Speed は0より大きくしてください。"
+            );
+
+            return;
+        }
+
+        Vector3 start =
+            rb.position;
+
+        Vector3 contactPosition =
+            blockContactPoint.position;
+
+        Vector3 landingPosition =
+            blockLandingPoint.position;
+
+        float spikeSpeed =
+            spikeSpeedKmh /
+            3.6f;
+
+        float blockExitSpeed =
+            blockExitSpeedKmh /
+            3.6f;
+
+
+        // Spike Contact -> Block Contact
+        if (
+            !CalculateBallisticVelocity(
+                start,
+                contactPosition,
+                spikeSpeed,
+                out Vector3 contactLaunchVelocity,
+                out float contactFlightTime
+            )
+        )
+        {
+            Debug.LogError(
+                "[Ball] 指定Spike SpeedではBlock Contact Pointへ到達できません。\n" +
+                $"Spike Contact Position = {start}\n" +
+                $"Block Contact Position = {contactPosition}\n" +
+                $"Spike Speed = {spikeSpeedKmh:F1} km/h"
+            );
+
+            return;
+        }
+
+
+        // Block Contact -> Block Landing の実現可能性を先に確認
+        if (
+            !CalculateBallisticVelocity(
+                contactPosition,
+                landingPosition,
+                blockExitSpeed,
+                out Vector3 landingLaunchVelocity,
+                out float landingFlightTime
+            )
+        )
+        {
+            Debug.LogError(
+                "[Ball] 指定Block Exit SpeedではBlock Landing Pointへ到達できません。\n" +
+                $"Block Contact Position = {contactPosition}\n" +
+                $"Block Landing Position = {landingPosition}\n" +
+                $"Block Exit Speed = {blockExitSpeedKmh:F1} km/h"
+            );
+
+            return;
+        }
+
+
+        currentSpikeTarget =
+            null;
+
+        spikeStartPosition =
+            start;
+
+        spikeTargetPositionAtLaunch =
+            contactPosition;
+
+        spikeInitialVelocity =
+            contactLaunchVelocity;
+
+        calculatedSpikeFlightTime =
+            contactFlightTime;
+
+        spikeElapsedTime =
+            0.0f;
+
+        spikeTargetTriggered =
+            false;
+
+
+        blockEnabledForCurrentSpike =
+            true;
+
+        currentBlockContactPoint =
+            blockContactPoint;
+
+        currentBlockLandingPoint =
+            blockLandingPoint;
+
+        blockContactPointPositionAtLaunch =
+            contactPosition;
+
+        blockLandingPointPositionAtLaunch =
+            landingPosition;
+
+        currentBlockExitSpeedKmh =
+            blockExitSpeedKmh;
+
+        currentBlockSpinRpm =
+            blockSpinRpm;
+
+        currentBlockContactFixedFrames =
+            Mathf.Max(
+                0,
+                blockContactFixedFrames
+            );
+
+        blockContactFramesRemaining =
+            0;
+
+        blockContactTriggered =
+            false;
+
+        blockLandingTriggered =
+            false;
+
+        blockLandingLaunchVelocity =
+            landingLaunchVelocity;
+
+        calculatedBlockLandingFlightTime =
+            landingFlightTime;
+
+        blockLandingElapsedTime =
+            0.0f;
+
+        blockLandingArrivalVelocity =
+            CalculateVelocityAtTime(
+                landingLaunchVelocity,
+                landingFlightTime
+            );
+
+
+        /*
+         * 重要:
+         *
+         * Contact前はDynamic Rigidbodyにしない。
+         *
+         * 100 km/hなら1 FixedUpdate = 0.02 sの間に
+         * 約0.56 m進むため、Point通過を後から検出すると
+         * 手を突き抜けてから戻る見た目になる。
+         *
+         * そこでContactまでだけは
+         * Kinematic + MovePositionで解析弾道を再生する。
+         */
+        StartBlockApproach(
+            contactLaunchVelocity
+        );
+
+
+        float launchAngle =
+            CalculateLaunchAngleDeg(
+                contactLaunchVelocity
+            );
+
+
+        Debug.Log(
+            "[Ball] Spike With Block\n" +
+            $"Spike Contact Position = {start}\n" +
+            $"Block Contact Point = {blockContactPoint.name}\n" +
+            $"Block Contact Position = {contactPosition}\n" +
+            $"Spike Speed = {spikeSpeedKmh:F1} km/h\n" +
+            $"Launch Angle = {launchAngle:F2} deg\n" +
+            $"Time To Block Contact = {contactFlightTime:F3} s\n" +
+            $"Block Contact Frames = {currentBlockContactFixedFrames}\n" +
+            $"Block Landing Point = {blockLandingPoint.name}\n" +
+            $"Block Landing Position = {landingPosition}\n" +
+            $"Block Exit Speed = {blockExitSpeedKmh:F1} km/h\n" +
+            $"Block Spin = {blockSpinRpm:F1} rpm"
+        );
+    }
+
+
+    // ============================================================
+    // Normal Spike Update
+    // ============================================================
+
     private void UpdateSpike()
     {
-        // Spike中はGravity + Collisionのみ。
-        // Targetへ強制誘導しない。
-
         spikeElapsedTime +=
             Time.fixedDeltaTime;
 
@@ -1742,20 +2037,612 @@ public class VolleyballBallPhysics : MonoBehaviour
                 $"Distance = {distance:F3} m"
             );
 
-            // Ballは停止しない。
             OnSpikeReachedTarget?.Invoke();
         }
     }
 
 
     // ============================================================
-    // Spike Ballistic Calculation
+    // Block Approach
     // ============================================================
 
-    /// <summary>
-    /// 指定SpeedでTargetを通る投射初速度を計算する。
-    /// 2解ある場合は低弾道を使用。
-    /// </summary>
+    private void StartBlockApproach(
+        Vector3 launchVelocity
+    )
+    {
+        StopPhysics();
+
+        rb.interpolation =
+            RigidbodyInterpolation.Interpolate;
+
+        spikeElapsedTime =
+            0.0f;
+
+        blockContactPending =
+            false;
+
+        CalculateScriptedSpin(
+            launchVelocity,
+            spikeSpinRpm,
+            out blockApproachSpinAxis,
+            out blockApproachSpinDegreesPerSecond
+        );
+
+        previousPosition =
+            rb.position;
+
+        currentState =
+            BallMotionState.Spiking;
+    }
+
+
+    private void UpdateBlockApproach()
+    {
+        if (!blockEnabledForCurrentSpike)
+        {
+            return;
+        }
+
+        /*
+         * 前回のFixedUpdateでContact PointへMovePosition済み。
+         * この時点ではすでにPoint上なので、そのまま停止状態へ。
+         */
+        if (blockContactPending)
+        {
+            BeginBlockContact();
+
+            return;
+        }
+
+        float nextTime =
+            Mathf.Min(
+                spikeElapsedTime +
+                Time.fixedDeltaTime,
+                calculatedSpikeFlightTime
+            );
+
+        Vector3 nextPosition =
+            EvaluateBallisticPosition(
+                spikeStartPosition,
+                spikeInitialVelocity,
+                nextTime
+            );
+
+        bool reachesContactThisStep =
+            nextTime >=
+            calculatedSpikeFlightTime -
+            0.000001f;
+
+        if (reachesContactThisStep)
+        {
+            nextPosition =
+                blockContactPointPositionAtLaunch;
+        }
+
+        /*
+         * Kinematic Rigidbodyなので、この位置より先へ
+         * 慣性で飛び出すことはない。
+         */
+        rb.MovePosition(
+            nextPosition
+        );
+
+        AdvanceScriptedSpin(
+            Time.fixedDeltaTime
+        );
+
+        spikeElapsedTime =
+            nextTime;
+
+        if (reachesContactThisStep)
+        {
+            blockContactPending =
+                true;
+        }
+    }
+
+
+    // ============================================================
+    // Block Contact
+    // ============================================================
+
+    private void BeginBlockContact()
+    {
+        if (!blockEnabledForCurrentSpike)
+        {
+            return;
+        }
+
+        if (blockContactTriggered)
+        {
+            return;
+        }
+
+        blockContactTriggered =
+            true;
+
+        blockContactPending =
+            false;
+
+        Vector3 exactIncomingVelocity =
+            CalculateVelocityAtTime(
+                spikeInitialVelocity,
+                calculatedSpikeFlightTime
+            );
+
+        float incomingSpeedKmh =
+            exactIncomingVelocity.magnitude *
+            3.6f;
+
+        /*
+         * 念のためContact Pointへ完全一致。
+         * ここへ来る時点でMovePositionによって
+         * すでにこの位置に到達している。
+         */
+        rb.position =
+            blockContactPointPositionAtLaunch;
+
+        transform.position =
+            blockContactPointPositionAtLaunch;
+
+        /*
+         * ReceiveのContactと同様に完全停止。
+         */
+        StopPhysics();
+
+        blockContactFramesRemaining =
+            currentBlockContactFixedFrames;
+
+        previousPosition =
+            blockContactPointPositionAtLaunch;
+
+        currentState =
+            BallMotionState.BlockContact;
+
+        string blockContactPointName =
+            currentBlockContactPoint != null
+                ? currentBlockContactPoint.name
+                : "null";
+
+        Debug.Log(
+            "[Ball] Block Contact\n" +
+            $"Block Contact Point = {blockContactPointName}\n" +
+            $"Contact Position = {blockContactPointPositionAtLaunch}\n" +
+            $"Incoming Speed = {incomingSpeedKmh:F1} km/h\n" +
+            $"Stop Frames = {currentBlockContactFixedFrames}"
+        );
+
+        if (
+            blockContactFramesRemaining <=
+            0
+        )
+        {
+            LaunchBlockLanding();
+        }
+    }
+
+
+    private void UpdateBlockContact()
+    {
+        blockContactFramesRemaining--;
+
+        if (
+            blockContactFramesRemaining <=
+            0
+        )
+        {
+            LaunchBlockLanding();
+        }
+    }
+
+
+    // ============================================================
+    // Block Landing Launch
+    // ============================================================
+
+    private void LaunchBlockLanding()
+    {
+        float exitSpeed =
+            currentBlockExitSpeedKmh /
+            3.6f;
+
+        if (
+            !CalculateBallisticVelocity(
+                blockContactPointPositionAtLaunch,
+                blockLandingPointPositionAtLaunch,
+                exitSpeed,
+                out Vector3 landingVelocity,
+                out float flightTime
+            )
+        )
+        {
+            Debug.LogError(
+                "[Ball] Block後のLanding軌道を計算できません。\n" +
+                $"Block Contact Position = {blockContactPointPositionAtLaunch}\n" +
+                $"Block Landing Position = {blockLandingPointPositionAtLaunch}\n" +
+                $"Block Exit Speed = {currentBlockExitSpeedKmh:F1} km/h"
+            );
+
+            return;
+        }
+
+        blockLandingLaunchVelocity =
+            landingVelocity;
+
+        calculatedBlockLandingFlightTime =
+            flightTime;
+
+        blockLandingElapsedTime =
+            0.0f;
+
+        blockLandingArrivalVelocity =
+            CalculateVelocityAtTime(
+                landingVelocity,
+                flightTime
+            );
+
+        /*
+         * ここからDynamic Rigidbodyへ戻す。
+         */
+        ActivatePhysics();
+
+        rb.linearVelocity =
+            blockLandingLaunchVelocity;
+
+        ApplySpinForVelocity(
+            blockLandingLaunchVelocity,
+            currentBlockSpinRpm
+        );
+
+        previousPosition =
+            blockContactPointPositionAtLaunch;
+
+        currentState =
+            BallMotionState.BlockLanding;
+
+        string landingPointName =
+            currentBlockLandingPoint != null
+                ? currentBlockLandingPoint.name
+                : "null";
+
+        Debug.Log(
+            "[Ball] Block Rebound Launch\n" +
+            $"From = {blockContactPointPositionAtLaunch}\n" +
+            $"Landing Point = {landingPointName}\n" +
+            $"Landing Position = {blockLandingPointPositionAtLaunch}\n" +
+            $"Exit Speed = {currentBlockExitSpeedKmh:F1} km/h\n" +
+            $"Spin = {currentBlockSpinRpm:F1} rpm\n" +
+            $"Velocity = {blockLandingLaunchVelocity}\n" +
+            $"Flight Time = {calculatedBlockLandingFlightTime:F3} s"
+        );
+    }
+
+
+    // ============================================================
+    // Block Landing Update
+    // ============================================================
+
+    private void UpdateBlockLanding()
+    {
+        if (blockLandingTriggered)
+        {
+            return;
+        }
+
+        blockLandingElapsedTime +=
+            Time.fixedDeltaTime;
+
+        if (
+            blockLandingElapsedTime <
+            calculatedBlockLandingFlightTime
+        )
+        {
+            return;
+        }
+
+        blockLandingTriggered =
+            true;
+
+        spikeTargetTriggered =
+            true;
+
+        /*
+         * Landing PointではSnapしない。
+         *
+         * Contact時にLanding Pointを通るよう初速度を1回だけ
+         * 計算済みなので、ここでは位置も速度も変更しない。
+         */
+        float landingError =
+            Vector3.Distance(
+                rb.position,
+                blockLandingPointPositionAtLaunch
+            );
+
+        currentState =
+            BallMotionState.AfterSpikeTarget;
+
+        string landingPointName =
+            currentBlockLandingPoint != null
+                ? currentBlockLandingPoint.name
+                : "null";
+
+        Debug.Log(
+            "[Ball] Block Landing Time Reached\n" +
+            $"Landing Point = {landingPointName}\n" +
+            $"Expected Position = {blockLandingPointPositionAtLaunch}\n" +
+            $"Actual Ball Position = {rb.position}\n" +
+            $"Landing Error = {landingError:F3} m\n" +
+            $"Speed = {rb.linearVelocity.magnitude * 3.6f:F1} km/h\n" +
+            $"Spin = {currentBlockSpinRpm:F1} rpm"
+        );
+
+        /*
+         * この先もGravity + Collision。
+         */
+        OnSpikeReachedTarget?.Invoke();
+    }
+
+
+    // ============================================================
+    // Block Runtime Reset
+    // ============================================================
+
+    private void ResetBlockRuntime()
+    {
+        blockEnabledForCurrentSpike =
+            false;
+
+        currentBlockContactPoint =
+            null;
+
+        currentBlockLandingPoint =
+            null;
+
+        blockContactPointPositionAtLaunch =
+            Vector3.zero;
+
+        blockLandingPointPositionAtLaunch =
+            Vector3.zero;
+
+        currentBlockExitSpeedKmh =
+            0.0f;
+
+        currentBlockSpinRpm =
+            0.0f;
+
+        currentBlockContactFixedFrames =
+            0;
+
+        blockContactFramesRemaining =
+            0;
+
+        blockContactTriggered =
+            false;
+
+        blockLandingTriggered =
+            false;
+
+        calculatedBlockLandingFlightTime =
+            0.0f;
+
+        blockLandingElapsedTime =
+            0.0f;
+
+        blockLandingLaunchVelocity =
+            Vector3.zero;
+
+        blockLandingArrivalVelocity =
+            Vector3.zero;
+
+        blockContactPending =
+            false;
+
+        blockApproachSpinAxis =
+            Vector3.right;
+
+        blockApproachSpinDegreesPerSecond =
+            0.0f;
+    }
+
+
+    // ============================================================
+    // Kinematic Block Spin
+    // ============================================================
+
+    private static void CalculateScriptedSpin(
+        Vector3 velocity,
+        float spinRpm,
+        out Vector3 spinAxis,
+        out float degreesPerSecond
+    )
+    {
+        Vector3 horizontalDirection =
+            velocity;
+
+        horizontalDirection.y =
+            0.0f;
+
+        if (
+            horizontalDirection.sqrMagnitude <=
+            0.0001f ||
+            Mathf.Abs(spinRpm) <=
+            0.0001f
+        )
+        {
+            spinAxis =
+                Vector3.right;
+
+            degreesPerSecond =
+                0.0f;
+
+            return;
+        }
+
+        horizontalDirection.Normalize();
+
+        Vector3 lateralAxis =
+            Vector3.Cross(
+                Vector3.up,
+                horizontalDirection
+            ).normalized;
+
+        float directionSign =
+            spinRpm >= 0.0f
+                ? -1.0f
+                : 1.0f;
+
+        spinAxis =
+            lateralAxis *
+            directionSign;
+
+        /*
+         * rpm -> degree/sec
+         *
+         * rpm * 360 / 60
+         * = rpm * 6
+         */
+        degreesPerSecond =
+            Mathf.Abs(spinRpm) *
+            6.0f;
+    }
+
+    private void AdvanceScriptedSpin(
+        float deltaTime
+    )
+    {
+        if (
+            blockApproachSpinDegreesPerSecond <=
+            0.0001f
+        )
+        {
+            return;
+        }
+
+        Quaternion deltaRotation =
+            Quaternion.AngleAxis(
+                blockApproachSpinDegreesPerSecond *
+                deltaTime,
+                blockApproachSpinAxis
+            );
+
+        /*
+         * KinematicなのでangularVelocityは使わずMoveRotation。
+         */
+        rb.MoveRotation(
+            deltaRotation *
+            rb.rotation
+        );
+    }
+
+
+    // ============================================================
+    // Spin
+    // ============================================================
+
+    private void ApplySpinForVelocity(
+        Vector3 velocity,
+        float spinRpm
+    )
+    {
+        Vector3 horizontalDirection =
+            velocity;
+
+        horizontalDirection.y =
+            0.0f;
+
+        if (
+            horizontalDirection.sqrMagnitude <=
+            0.0001f ||
+            Mathf.Abs(spinRpm) <=
+            0.0001f
+        )
+        {
+            rb.angularVelocity =
+                Vector3.zero;
+
+            return;
+        }
+
+        horizontalDirection.Normalize();
+
+        Vector3 lateralAxis =
+            Vector3.Cross(
+                Vector3.up,
+                horizontalDirection
+            ).normalized;
+
+        float angularSpeed =
+            Mathf.Abs(spinRpm) *
+            2.0f *
+            Mathf.PI /
+            60.0f;
+
+        float directionSign =
+            spinRpm >= 0.0f
+                ? -1.0f
+                : 1.0f;
+
+        rb.angularVelocity =
+            lateralAxis *
+            angularSpeed *
+            directionSign;
+    }
+
+
+    // ============================================================
+    // Utility
+    // ============================================================
+
+    private static float CalculateLaunchAngleDeg(
+        Vector3 velocity
+    )
+    {
+        float horizontalSpeed =
+            new Vector2(
+                velocity.x,
+                velocity.z
+            ).magnitude;
+
+        return
+            Mathf.Atan2(
+                velocity.y,
+                horizontalSpeed
+            ) *
+            Mathf.Rad2Deg;
+    }
+
+    private static Vector3 CalculateVelocityAtTime(
+        Vector3 initialVelocity,
+        float time
+    )
+    {
+        return
+            initialVelocity +
+            Physics.gravity *
+            time;
+    }
+
+    private static Vector3 EvaluateBallisticPosition(
+        Vector3 start,
+        Vector3 initialVelocity,
+        float time
+    )
+    {
+        return
+            start +
+            initialVelocity *
+            time +
+            0.5f *
+            Physics.gravity *
+            time *
+            time;
+    }
+
+
+    // ============================================================
+    // Ballistic Calculation
+    // ============================================================
+
     private static bool CalculateBallisticVelocity(
         Vector3 start,
         Vector3 target,
@@ -1836,7 +2723,9 @@ public class VolleyballBallPhysics : MonoBehaviour
                 discriminant
             );
 
-        // Low trajectory
+        /*
+         * 低弾道解
+         */
         float tanTheta =
             (
                 speedSquared -
@@ -1962,6 +2851,9 @@ public class VolleyballBallPhysics : MonoBehaviour
         rb.useGravity =
             true;
 
+        rb.interpolation =
+            RigidbodyInterpolation.Interpolate;
+
         rb.collisionDetectionMode =
             CollisionDetectionMode.ContinuousDynamic;
 
@@ -1975,17 +2867,28 @@ public class VolleyballBallPhysics : MonoBehaviour
 
     private void StopPhysics()
     {
-        rb.linearVelocity =
-            Vector3.zero;
+        /*
+         * Dynamic時だけ速度を書き換える。
+         * Kinematic RigidbodyにangularVelocityを書き込むと
+         * Unity警告が出るため。
+         */
+        if (!rb.isKinematic)
+        {
+            rb.linearVelocity =
+                Vector3.zero;
 
-        rb.angularVelocity =
-            Vector3.zero;
+            rb.angularVelocity =
+                Vector3.zero;
+        }
 
         rb.useGravity =
             false;
 
-        rb.isKinematic =
-            true;
+        if (!rb.isKinematic)
+        {
+            rb.isKinematic =
+                true;
+        }
 
         rb.collisionDetectionMode =
             CollisionDetectionMode.ContinuousSpeculative;
