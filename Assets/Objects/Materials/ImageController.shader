@@ -32,6 +32,12 @@ Shader "Custom/ImageController"
             "Out Of Range Color",
             Color
         ) = (0, 0, 0, 1)
+
+
+        _FadeAmount (
+            "Experiment Fade Amount",
+            Range(0, 1)
+        ) = 0
     }
 
 
@@ -82,6 +88,8 @@ Shader "Custom/ImageController"
             float _GuardBandPixels;
 
             fixed4 _OutOfRangeColor;
+
+            float _FadeAmount;
 
 
             // =================================================
@@ -148,6 +156,45 @@ Shader "Custom/ImageController"
 
 
             // =================================================
+            // Experiment Fade
+            // =================================================
+
+            fixed4 ApplyExperimentFade(
+                fixed4 inputColor
+            )
+            {
+                float amount =
+                    saturate(
+                        _FadeAmount
+                    );
+
+
+                inputColor.rgb =
+                    lerp(
+                        inputColor.rgb,
+                        fixed3(
+                            0.0,
+                            0.0,
+                            0.0
+                        ),
+                        amount
+                    );
+
+
+                inputColor.a =
+                    lerp(
+                        inputColor.a,
+                        1.0,
+                        amount
+                    );
+
+
+                return
+                    inputColor;
+            }
+
+
+            // =================================================
             // Fragment Shader
             // =================================================
 
@@ -155,10 +202,6 @@ Shader "Custom/ImageController"
                 v2f input
             ) : SV_Target
             {
-                // =============================================
-                // Texture information
-                // =============================================
-
                 float sourceWidth =
                     _MainTex_TexelSize.z;
 
@@ -174,10 +217,6 @@ Shader "Custom/ImageController"
                     );
 
 
-                /*
-                 * Guard Bandを除いた、
-                 * 本来表示する画像幅
-                 */
                 float visibleWidth =
                     sourceWidth -
                     2.0 *
@@ -187,30 +226,11 @@ Shader "Custom/ImageController"
                 if (visibleWidth <= 1.0)
                 {
                     return
-                        _OutOfRangeColor;
+                        ApplyExperimentFade(
+                            _OutOfRangeColor
+                        );
                 }
 
-
-                // =============================================
-                // Preview Mode
-                // =============================================
-
-                /*
-                 * PreviewMode = 1
-                 *
-                 * UI RawImage
-                 * → 左右反転しない
-                 *
-                 *
-                 * PreviewMode = 0
-                 *
-                 * Wheatstone Display
-                 * → 水平反転して出力
-                 *
-                 * その後、実際のMirrorで
-                 * もう一度反転されるため、
-                 * 観察者には通常方向で見える。
-                 */
 
                 float previewEnabled =
                     step(
@@ -219,42 +239,21 @@ Shader "Custom/ImageController"
                     );
 
 
-                // =============================================
-                // Horizontal coordinate
-                // =============================================
-
                 float logicalU;
 
 
                 if (previewEnabled > 0.5)
                 {
-                    // UI Preview
                     logicalU =
                         input.uv.x;
                 }
                 else
                 {
-                    // Wheatstone Display
                     logicalU =
                         1.0 -
                         input.uv.x;
                 }
 
-
-                // =============================================
-                // Output pixel -> Source pixel
-                // =============================================
-
-                /*
-                 * Shift = 0:
-                 *
-                 * [Guard][ Visible Image ][Guard]
-                 *          ↑ここだけ表示
-                 *
-                 *
-                 * Shiftすると、
-                 * Guard側へサンプリング領域が移動する。
-                 */
 
                 float sourcePixelX =
                     guardPixels +
@@ -263,20 +262,10 @@ Shader "Custom/ImageController"
                     _ShiftPixels;
 
 
-                // =============================================
-                // Out of Guard Band
-                // =============================================
-
-                /*
-                 * 正常なShift範囲では
-                 * Guard Band内の実際のSceneが表示される。
-                 *
-                 * Guard Bandを超えた場合のみ
-                 * 黒などの指定色を表示。
-                 */
-
-                if (sourcePixelX < 0.0 ||
-                    sourcePixelX >= sourceWidth)
+                if (
+                    sourcePixelX < 0.0 ||
+                    sourcePixelX >= sourceWidth
+                )
                 {
                     fixed4 outColor =
                         _OutOfRangeColor;
@@ -295,17 +284,11 @@ Shader "Custom/ImageController"
 
 
                     return
-                        outColor;
+                        ApplyExperimentFade(
+                            outColor
+                        );
                 }
 
-
-                // =============================================
-                // Pixel -> UV
-                // =============================================
-
-                /*
-                 * +0.5はPixel Centerを読むため。
-                 */
 
                 float sampleU =
                     (
@@ -322,10 +305,6 @@ Shader "Custom/ImageController"
                     );
 
 
-                // =============================================
-                // Sample
-                // =============================================
-
                 fixed4 color =
                     tex2D(
                         _MainTex,
@@ -333,22 +312,9 @@ Shader "Custom/ImageController"
                     );
 
 
-                // RawImageなどのVertex Color
                 color.rgb *=
                     input.color.rgb;
 
-
-                // =============================================
-                // Alpha
-                // =============================================
-
-                /*
-                 * Preview:
-                 * RawImage側のAlphaを使用
-                 *
-                 * Main Display:
-                 * 常に不透明
-                 */
 
                 if (previewEnabled > 0.5)
                 {
@@ -363,7 +329,9 @@ Shader "Custom/ImageController"
 
 
                 return
-                    color;
+                    ApplyExperimentFade(
+                        color
+                    );
             }
 
 

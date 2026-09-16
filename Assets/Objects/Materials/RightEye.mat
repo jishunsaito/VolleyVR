@@ -43,6 +43,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _FadeAmount: 0
     - _GuardBandPixels: 500
     - _PreviewMode: 0
     - _ShiftPixels: 0

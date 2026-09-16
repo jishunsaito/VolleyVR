@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -441,6 +442,60 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
+    // Experiment Fade
+    // ============================================================
+
+    [Header("Experiment Fade")]
+
+    [Tooltip(
+        "実験用の映像遮蔽を有効にするかどうか。\n" +
+        "End Phase開始から、そのPhaseに対応するDelay秒後にFade Outする。"
+    )]
+    [SerializeField]
+    private bool enableExperimentFade =
+        true;
+
+    [Tooltip(
+        "Shader Fadeを制御するImageController。"
+    )]
+    [SerializeField]
+    private ImageController imageController;
+
+    [Tooltip("End Phase = Serve のとき、Serve開始からFade Out開始までの時間 [s]")]
+    [Min(0.0f)]
+    [SerializeField]
+    private float serveFadeDelay =
+        0.80f;
+
+    [Tooltip("End Phase = Receive のとき、Receive開始からFade Out開始までの時間 [s]")]
+    [Min(0.0f)]
+    [SerializeField]
+    private float receiveFadeDelay =
+        0.50f;
+
+    [Tooltip("End Phase = Toss のとき、Toss開始からFade Out開始までの時間 [s]")]
+    [Min(0.0f)]
+    [SerializeField]
+    private float tossFadeDelay =
+        0.50f;
+
+    [Tooltip("End Phase = Spike のとき、Spike開始からFade Out開始までの時間 [s]")]
+    [Min(0.0f)]
+    [SerializeField]
+    private float spikeFadeDelay =
+        0.20f;
+
+    [Tooltip(
+        "Fade Outにかける時間 [s]。\n" +
+        "0なら指定時刻で瞬時に完全遮蔽する。"
+    )]
+    [Min(0.0f)]
+    [SerializeField]
+    private float fadeDuration =
+        0.03f;
+
+
+    // ============================================================
     // Startup
     // ============================================================
 
@@ -467,6 +522,8 @@ public class RallyController : MonoBehaviour
     // ============================================================
 
     private VolleyballBallPhysics currentBallPhysics;
+
+    private Coroutine experimentFadeTimerCoroutine;
 
     private Quaternion basePlayRootRotation =
         Quaternion.identity;
@@ -690,6 +747,13 @@ public class RallyController : MonoBehaviour
     {
         ValidateSimulationRange();
 
+        /*
+         * 前回TrialのFade状態や、
+         * 実行待ちのFade Timerが残っていても
+         * 新しいTrial開始時には必ず通常表示へ戻す。
+         */
+        ResetExperimentFade();
+
         switch (startPhase)
         {
             case PlayPhase.Serve:
@@ -737,6 +801,12 @@ public class RallyController : MonoBehaviour
     public void ResetSelectedSimulation()
     {
         ValidateSimulationRange();
+
+        /*
+         * ZキーによるResetを含め、
+         * Ball Reset時にはFadeも必ず解除する。
+         */
+        ResetExperimentFade();
 
         switch (startPhase)
         {
@@ -1103,6 +1173,10 @@ public class RallyController : MonoBehaviour
             $"Forward Distance = {tossForwardDistance:F2} m"
         );
 
+        NotifyPhaseStarted(
+            PlayPhase.Serve
+        );
+
         currentBallPhysics.TossUp(
             tossHeight,
             serveHitHeight,
@@ -1131,6 +1205,10 @@ public class RallyController : MonoBehaviour
 
             return;
         }
+
+        NotifyPhaseStarted(
+            PlayPhase.Receive
+        );
 
         currentBallPhysics.ReceiveToSetter(
             setterPosition,
@@ -1303,6 +1381,10 @@ public class RallyController : MonoBehaviour
             $"Apex Height = {setApexHeight:F3} m"
         );
 
+        NotifyPhaseStarted(
+            PlayPhase.Toss
+        );
+
         currentBallPhysics.SetToTarget(
             targetPosition,
             setApexHeight,
@@ -1399,6 +1481,10 @@ public class RallyController : MonoBehaviour
                 $"Block Spin = {blockSpinRpm:F1} rpm"
             );
 
+            NotifyPhaseStarted(
+                PlayPhase.Spike
+            );
+
             currentBallPhysics.SpikeWithBlock(
                 blockContactPoint,
                 blockLandingPoint,
@@ -1434,6 +1520,10 @@ public class RallyController : MonoBehaviour
             $"Target = {spikeTarget.name}\n" +
             $"Target Position = {spikeTarget.position}\n" +
             $"Speed = {spikeSpeedKmh:F1} km/h"
+        );
+
+        NotifyPhaseStarted(
+            PlayPhase.Spike
         );
 
         currentBallPhysics.Spike(
@@ -1743,6 +1833,237 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
+    // Experiment Fade Control
+    // ============================================================
+
+    public void SetExperimentFadeEnabled(
+        bool enabled
+    )
+    {
+        enableExperimentFade =
+            enabled;
+
+        if (!enableExperimentFade)
+        {
+            ResetExperimentFade();
+        }
+    }
+
+    public void SetServeFadeDelay(
+        float seconds
+    )
+    {
+        serveFadeDelay =
+            Mathf.Max(
+                0.0f,
+                seconds
+            );
+    }
+
+    public void SetReceiveFadeDelay(
+        float seconds
+    )
+    {
+        receiveFadeDelay =
+            Mathf.Max(
+                0.0f,
+                seconds
+            );
+    }
+
+    public void SetTossFadeDelay(
+        float seconds
+    )
+    {
+        tossFadeDelay =
+            Mathf.Max(
+                0.0f,
+                seconds
+            );
+    }
+
+    public void SetSpikeFadeDelay(
+        float seconds
+    )
+    {
+        spikeFadeDelay =
+            Mathf.Max(
+                0.0f,
+                seconds
+            );
+    }
+
+    public void SetFadeDuration(
+        float seconds
+    )
+    {
+        fadeDuration =
+            Mathf.Max(
+                0.0f,
+                seconds
+            );
+    }
+
+    private void NotifyPhaseStarted(
+        PlayPhase phase
+    )
+    {
+        if (!enableExperimentFade)
+        {
+            return;
+        }
+
+        if (phase != endPhase)
+        {
+            return;
+        }
+
+        if (imageController == null)
+        {
+            Debug.LogWarning(
+                "[RallyController] Experiment Fade用の" +
+                "ImageControllerが設定されていません。"
+            );
+
+            return;
+        }
+
+        CancelExperimentFadeTimer();
+
+        float delay =
+            GetFadeDelay(
+                phase
+            );
+
+        experimentFadeTimerCoroutine =
+            StartCoroutine(
+                FadeAfterDelay(
+                    phase,
+                    delay
+                )
+            );
+
+        Debug.Log(
+            "[RallyController] Experiment Fade Scheduled\n" +
+            $"End Phase = {phase}\n" +
+            $"Delay = {delay:F3} s\n" +
+            $"Fade Duration = {fadeDuration:F3} s"
+        );
+    }
+
+    private IEnumerator FadeAfterDelay(
+        PlayPhase phase,
+        float delay
+    )
+    {
+        if (delay > 0.0f)
+        {
+            yield return
+                new WaitForSecondsRealtime(
+                    delay
+                );
+        }
+
+        experimentFadeTimerCoroutine =
+            null;
+
+        if (!enableExperimentFade)
+        {
+            yield break;
+        }
+
+        if (imageController == null)
+        {
+            yield break;
+        }
+
+        if (phase != endPhase)
+        {
+            yield break;
+        }
+
+        imageController.FadeOut(
+            fadeDuration
+        );
+
+        Debug.Log(
+            "[RallyController] Experiment Fade Started\n" +
+            $"Phase = {phase}\n" +
+            $"Fade Duration = {fadeDuration:F3} s"
+        );
+    }
+
+    private float GetFadeDelay(
+        PlayPhase phase
+    )
+    {
+        switch (phase)
+        {
+            case PlayPhase.Serve:
+                return
+                    Mathf.Max(
+                        0.0f,
+                        serveFadeDelay
+                    );
+
+            case PlayPhase.Receive:
+                return
+                    Mathf.Max(
+                        0.0f,
+                        receiveFadeDelay
+                    );
+
+            case PlayPhase.Toss:
+                return
+                    Mathf.Max(
+                        0.0f,
+                        tossFadeDelay
+                    );
+
+            case PlayPhase.Spike:
+                return
+                    Mathf.Max(
+                        0.0f,
+                        spikeFadeDelay
+                    );
+
+            default:
+                return 0.0f;
+        }
+    }
+
+    private void CancelExperimentFadeTimer()
+    {
+        if (
+            experimentFadeTimerCoroutine ==
+            null
+        )
+        {
+            return;
+        }
+
+        StopCoroutine(
+            experimentFadeTimerCoroutine
+        );
+
+        experimentFadeTimerCoroutine =
+            null;
+    }
+
+    public void ResetExperimentFade()
+    {
+        CancelExperimentFadeTimer();
+
+        if (imageController == null)
+        {
+            return;
+        }
+
+        imageController.ResetFade();
+    }
+
+
+    // ============================================================
     // Serve Start Selection
     // ============================================================
 
@@ -1919,6 +2240,8 @@ public class RallyController : MonoBehaviour
 
     private void OnDestroy()
     {
+        CancelExperimentFadeTimer();
+
         UnbindCurrentBall();
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -33,6 +34,27 @@ public class ImageController : MonoBehaviour
 
     [SerializeField]
     private RawImage rightPreviewRawImage;
+
+
+    // =========================================================
+    // Experiment Fade
+    // =========================================================
+
+    [Header("Experiment Fade")]
+
+    [Tooltip(
+        "0 = 通常表示、1 = 完全に黒。\n" +
+        "通常はRallyControllerから制御します。"
+    )]
+    [Range(0.0f, 1.0f)]
+    [SerializeField]
+    private float fadeAmount =
+        0.0f;
+
+    private Coroutine fadeCoroutine;
+
+    public float FadeAmount =>
+        fadeAmount;
 
 
     // =========================================================
@@ -90,13 +112,11 @@ public class ImageController : MonoBehaviour
     [SerializeField]
     private Transform orbitCenter;
 
-
     [Tooltip(
         "ネット中心からStereoCameraまでの距離 r [Unity Unit]"
     )]
     [Min(0.001f)]
     public float orbitRadius = 10.0f;
-
 
     [Tooltip(
         "ネット中心から見た仰角 Theta [deg]\n" +
@@ -105,16 +125,8 @@ public class ImageController : MonoBehaviour
     )]
     public float orbitThetaDeg = 0.0f;
 
-
-    /*
-     * Thetaを変更するときの円軌道の向き。
-     *
-     * ユーザーが直接操作する値ではない。
-     *
-     * 現在のCameraとNetCenterのXZ方向から
-     * 自動的に求める。
-     */
-    private float orbitAzimuthDeg = 180.0f;
+    private float orbitAzimuthDeg =
+        180.0f;
 
     private bool orbitInitialized;
 
@@ -126,7 +138,8 @@ public class ImageController : MonoBehaviour
     [Header("Baseline [mm]")]
 
     [Min(0.0f)]
-    public float baseline = 100.0f;
+    public float baseline =
+        100.0f;
 
 
     // =========================================================
@@ -136,7 +149,8 @@ public class ImageController : MonoBehaviour
     [Header("Focal Length [mm]")]
 
     [Min(0.1f)]
-    public float focalLength = 90.0f;
+    public float focalLength =
+        90.0f;
 
 
     // =========================================================
@@ -148,11 +162,9 @@ public class ImageController : MonoBehaviour
     public Vector3 stereoCameraPosition =
         Vector3.zero;
 
-
     [Tooltip("StereoCamera親のPitch [deg]")]
     public float stereoCameraRotationX =
         0.0f;
-
 
     [Tooltip("StereoCamera親のYaw [deg]")]
     public float stereoCameraRotationY =
@@ -174,6 +186,9 @@ public class ImageController : MonoBehaviour
 
     private static readonly int MainTextureProperty =
         Shader.PropertyToID("_MainTex");
+
+    private static readonly int FadeAmountProperty =
+        Shader.PropertyToID("_FadeAmount");
 
 
     // =========================================================
@@ -218,26 +233,14 @@ public class ImageController : MonoBehaviour
             );
     }
 
-
     private void Awake()
     {
         CacheOriginalCameraSettings();
 
-        /*
-         * Inspector上のXYZ/Pitch/Yawを
-         * まずTransformへ反映する。
-         */
         ApplyStereoCameraTransform();
 
-        /*
-         * 現在のXYZから
-         * r / Thetaを初期化する。
-         *
-         * AwakeなのでUIController.Startより先に実行される。
-         */
         SynchronizePolarFromCartesian();
     }
-
 
     private void Start()
     {
@@ -250,8 +253,9 @@ public class ImageController : MonoBehaviour
         ValidateMaterials();
 
         ApplyAllParameters();
-    }
 
+        ResetFade();
+    }
 
     private void Update()
     {
@@ -264,14 +268,205 @@ public class ImageController : MonoBehaviour
         ApplyFocalLength();
 
         ApplyStereoCameraTransform();
-    }
 
+        ApplyFade();
+    }
 
     private void OnDestroy()
     {
+        StopFadeCoroutine();
+
         RestoreOriginalCameraSettings();
 
         ReleaseGuardBandTextures();
+    }
+
+
+    // =========================================================
+    // Experiment Fade
+    // =========================================================
+
+    public void SetFadeAmount(
+        float amount
+    )
+    {
+        fadeAmount =
+            Mathf.Clamp01(
+                amount
+            );
+
+        ApplyFade();
+    }
+
+    public void FadeOut(
+        float duration
+    )
+    {
+        StopFadeCoroutine();
+
+        duration =
+            Mathf.Max(
+                0.0f,
+                duration
+            );
+
+        if (duration <= 0.0f)
+        {
+            SetFadeAmount(
+                1.0f
+            );
+
+            return;
+        }
+
+        fadeCoroutine =
+            StartCoroutine(
+                FadeRoutine(
+                    fadeAmount,
+                    1.0f,
+                    duration
+                )
+            );
+    }
+
+    public void FadeIn(
+        float duration
+    )
+    {
+        StopFadeCoroutine();
+
+        duration =
+            Mathf.Max(
+                0.0f,
+                duration
+            );
+
+        if (duration <= 0.0f)
+        {
+            SetFadeAmount(
+                0.0f
+            );
+
+            return;
+        }
+
+        fadeCoroutine =
+            StartCoroutine(
+                FadeRoutine(
+                    fadeAmount,
+                    0.0f,
+                    duration
+                )
+            );
+    }
+
+    public void ResetFade()
+    {
+        StopFadeCoroutine();
+
+        fadeAmount =
+            0.0f;
+
+        ApplyFade();
+    }
+
+    private IEnumerator FadeRoutine(
+        float startAmount,
+        float targetAmount,
+        float duration
+    )
+    {
+        float elapsed =
+            0.0f;
+
+        while (elapsed < duration)
+        {
+            elapsed +=
+                Time.unscaledDeltaTime;
+
+            float t =
+                Mathf.Clamp01(
+                    elapsed /
+                    duration
+                );
+
+            fadeAmount =
+                Mathf.Lerp(
+                    startAmount,
+                    targetAmount,
+                    t
+                );
+
+            ApplyFade();
+
+            yield return null;
+        }
+
+        fadeAmount =
+            targetAmount;
+
+        ApplyFade();
+
+        fadeCoroutine =
+            null;
+    }
+
+    private void StopFadeCoroutine()
+    {
+        if (fadeCoroutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(
+            fadeCoroutine
+        );
+
+        fadeCoroutine =
+            null;
+    }
+
+    private void ApplyFade()
+    {
+        ApplyFadeToMaterial(
+            leftMaterial
+        );
+
+        ApplyFadeToMaterial(
+            rightMaterial
+        );
+
+        ApplyFadeToMaterial(
+            leftPreviewMaterial
+        );
+
+        ApplyFadeToMaterial(
+            rightPreviewMaterial
+        );
+    }
+
+    private void ApplyFadeToMaterial(
+        Material material
+    )
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        if (
+            !material.HasProperty(
+                FadeAmountProperty
+            )
+        )
+        {
+            return;
+        }
+
+        material.SetFloat(
+            FadeAmountProperty,
+            fadeAmount
+        );
     }
 
 
@@ -289,7 +484,6 @@ public class ImageController : MonoBehaviour
             originalLeftSensorSize =
                 leftCamera.sensorSize;
         }
-
 
         if (rightCamera != null)
         {
@@ -319,7 +513,6 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         if (originalLeftTexture == null ||
             originalRightTexture == null)
         {
@@ -332,13 +525,11 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         leftGuardTexture =
             CreateGuardTexture(
                 originalLeftTexture,
                 "LeftEye_GuardBand"
             );
-
 
         rightGuardTexture =
             CreateGuardTexture(
@@ -346,18 +537,14 @@ public class ImageController : MonoBehaviour
                 "RightEye_GuardBand"
             );
 
-
         leftCamera.targetTexture =
             leftGuardTexture;
-
 
         rightCamera.targetTexture =
             rightGuardTexture;
 
-
         ApplyGuardBandSensorSize();
     }
-
 
     private RenderTexture CreateGuardTexture(
         RenderTexture source,
@@ -367,40 +554,31 @@ public class ImageController : MonoBehaviour
         RenderTextureDescriptor descriptor =
             source.descriptor;
 
-
         int visibleWidth =
             source.width;
-
 
         descriptor.width =
             visibleWidth +
             guardBandPixels * 2;
 
-
         descriptor.height =
             source.height;
-
 
         RenderTexture texture =
             new RenderTexture(
                 descriptor
             );
 
-
         texture.name =
             textureName;
-
 
         texture.filterMode =
             source.filterMode;
 
-
         texture.wrapMode =
             TextureWrapMode.Clamp;
 
-
         texture.Create();
-
 
         return texture;
     }
@@ -420,16 +598,13 @@ public class ImageController : MonoBehaviour
                     originalLeftTexture.width
                 );
 
-
             leftCamera.sensorSize =
                 new Vector2(
                     originalLeftSensorSize.x *
                     scale,
-
                     originalLeftSensorSize.y
                 );
         }
-
 
         if (rightCamera != null &&
             originalRightTexture != null)
@@ -439,17 +614,14 @@ public class ImageController : MonoBehaviour
                     originalRightTexture.width
                 );
 
-
             rightCamera.sensorSize =
                 new Vector2(
                     originalRightSensorSize.x *
                     scale,
-
                     originalRightSensorSize.y
                 );
         }
     }
-
 
     private float GetOverscanScale(
         int visibleWidth
@@ -460,11 +632,9 @@ public class ImageController : MonoBehaviour
             return 1.0f;
         }
 
-
         float guardWidth =
             visibleWidth +
             guardBandPixels * 2.0f;
-
 
         return
             guardWidth /
@@ -487,7 +657,6 @@ public class ImageController : MonoBehaviour
             );
         }
 
-
         if (rightMaterial != null &&
             rightGuardTexture != null)
         {
@@ -496,7 +665,6 @@ public class ImageController : MonoBehaviour
                 rightGuardTexture
             );
         }
-
 
         if (leftPreviewMaterial != null &&
             leftGuardTexture != null)
@@ -507,7 +675,6 @@ public class ImageController : MonoBehaviour
             );
         }
 
-
         if (rightPreviewMaterial != null &&
             rightGuardTexture != null)
         {
@@ -517,14 +684,12 @@ public class ImageController : MonoBehaviour
             );
         }
 
-
         if (leftPreviewRawImage != null &&
             leftGuardTexture != null)
         {
             leftPreviewRawImage.texture =
                 leftGuardTexture;
         }
-
 
         if (rightPreviewRawImage != null &&
             rightGuardTexture != null)
@@ -546,25 +711,21 @@ public class ImageController : MonoBehaviour
             false
         );
 
-
         SetMaterialMode(
             rightMaterial,
             false
         );
-
 
         SetMaterialMode(
             leftPreviewMaterial,
             true
         );
 
-
         SetMaterialMode(
             rightPreviewMaterial,
             true
         );
     }
-
 
     private void SetMaterialMode(
         Material material,
@@ -576,14 +737,12 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         material.SetFloat(
             PreviewModeProperty,
             previewMode
                 ? 1.0f
                 : 0.0f
         );
-
 
         material.SetInt(
             GuardBandPixelsProperty,
@@ -610,7 +769,6 @@ public class ImageController : MonoBehaviour
             );
         }
 
-
         if (rightMaterial != null &&
             rightPreviewMaterial != null &&
             rightMaterial == rightPreviewMaterial)
@@ -636,25 +794,21 @@ public class ImageController : MonoBehaviour
             shiftPixels
         );
 
-
         ApplyShiftToMaterial(
             rightMaterial,
             -shiftPixels
         );
-
 
         ApplyShiftToMaterial(
             leftPreviewMaterial,
             shiftPixels
         );
 
-
         ApplyShiftToMaterial(
             rightPreviewMaterial,
             -shiftPixels
         );
     }
-
 
     private void ApplyShiftToMaterial(
         Material material,
@@ -666,12 +820,10 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         material.SetInt(
             ShiftPixelsProperty,
             shift
         );
-
 
         material.SetInt(
             GuardBandPixelsProperty,
@@ -692,38 +844,31 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         float halfBaseline =
             baseline *
             0.5f *
             0.001f;
-
 
         Vector3 leftPosition =
             leftCamera
                 .transform
                 .localPosition;
 
-
         leftPosition.x =
             -halfBaseline;
-
 
         leftCamera
             .transform
             .localPosition =
                 leftPosition;
 
-
         Vector3 rightPosition =
             rightCamera
                 .transform
                 .localPosition;
 
-
         rightPosition.x =
             halfBaseline;
-
 
         rightCamera
             .transform
@@ -743,22 +888,18 @@ public class ImageController : MonoBehaviour
             leftCamera.usePhysicalProperties =
                 true;
 
-
             leftCamera.focalLength =
                 focalLength;
         }
-
 
         if (rightCamera != null)
         {
             rightCamera.usePhysicalProperties =
                 true;
 
-
             rightCamera.focalLength =
                 focalLength;
         }
-
 
         ApplyGuardBandSensorSize();
     }
@@ -775,23 +916,18 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         stereoCameraRoot.localPosition =
             stereoCameraPosition;
-
 
         Vector3 currentEulerAngles =
             stereoCameraRoot
                 .localEulerAngles;
 
-
         currentEulerAngles.x =
             stereoCameraRotationX;
 
-
         currentEulerAngles.y =
             stereoCameraRotationY;
-
 
         stereoCameraRoot.localEulerAngles =
             currentEulerAngles;
@@ -802,15 +938,6 @@ public class ImageController : MonoBehaviour
     // Cartesian Position Control
     // =========================================================
 
-    /// <summary>
-    /// XYZ UI用。
-    ///
-    /// XYZ位置を変更したあと、
-    /// その位置からr / Thetaを再計算する。
-    ///
-    /// XYZ操作ではLookAtは行わないため、
-    /// 従来通りPitchを個別に操作できる。
-    /// </summary>
     public void SetStereoCameraPosition(
         Vector3 localPosition
     )
@@ -818,24 +945,17 @@ public class ImageController : MonoBehaviour
         stereoCameraPosition =
             localPosition;
 
-
         ApplyStereoCameraTransform();
-
 
         SynchronizePolarFromCartesian();
     }
 
-
-    /// <summary>
-    /// Pitch UI用。
-    /// </summary>
     public void SetStereoCameraPitch(
         float pitchDeg
     )
     {
         stereoCameraRotationX =
             pitchDeg;
-
 
         ApplyStereoCameraTransform();
     }
@@ -845,12 +965,6 @@ public class ImageController : MonoBehaviour
     // Polar Coordinate Control
     // =========================================================
 
-    /// <summary>
-    /// 半径 r を変更。
-    ///
-    /// Thetaと軌道方向を維持したまま
-    /// ネット中心からの距離だけ変更する。
-    /// </summary>
     public void SetOrbitRadius(
         float radius
     )
@@ -860,24 +974,15 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         orbitRadius =
             Mathf.Max(
                 0.001f,
                 radius
             );
 
-
         ApplyPolarToStereoCamera();
     }
 
-
-    /// <summary>
-    /// Thetaを変更。
-    ///
-    /// r一定なので
-    /// ネット中心を中心とした円軌道を移動する。
-    /// </summary>
     public void SetOrbitTheta(
         float thetaDeg
     )
@@ -887,26 +992,14 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         orbitThetaDeg =
             NormalizeAngle(
                 thetaDeg
             );
 
-
         ApplyPolarToStereoCamera();
     }
 
-
-    /// <summary>
-    /// 現在のXYZ位置から
-    ///
-    /// r
-    /// Theta
-    /// Azimuth
-    ///
-    /// を計算する。
-    /// </summary>
     public void SynchronizePolarFromCartesian()
     {
         if (stereoCameraRoot == null ||
@@ -918,19 +1011,15 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         Vector3 cameraWorldPosition =
             stereoCameraRoot.position;
-
 
         Vector3 offset =
             cameraWorldPosition -
             orbitCenter.position;
 
-
         float radius =
             offset.magnitude;
-
 
         if (radius <= 0.000001f)
         {
@@ -946,18 +1035,8 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
-        // -----------------------------
-        // r
-        // -----------------------------
-
         orbitRadius =
             radius;
-
-
-        // -----------------------------
-        // 水平方向距離
-        // -----------------------------
 
         float horizontalDistance =
             new Vector2(
@@ -965,32 +1044,12 @@ public class ImageController : MonoBehaviour
                 offset.z
             ).magnitude;
 
-
-        // -----------------------------
-        // Theta
-        //
-        // atan2(
-        //     高さ差,
-        //     水平距離
-        // )
-        // -----------------------------
-
         orbitThetaDeg =
             Mathf.Atan2(
                 offset.y,
                 horizontalDistance
             ) *
             Mathf.Rad2Deg;
-
-
-        // -----------------------------
-        // Azimuth
-        //
-        // Thetaを動かすときに
-        // どの縦平面を円軌道にするか。
-        //
-        // 現在のCameraのXZ方向を使う。
-        // -----------------------------
 
         if (horizontalDistance >
             0.000001f)
@@ -1003,16 +1062,10 @@ public class ImageController : MonoBehaviour
                 Mathf.Rad2Deg;
         }
 
-
         orbitInitialized =
             true;
     }
 
-
-    /// <summary>
-    /// r / Thetaから
-    /// StereoCameraのXYZ位置を計算する。
-    /// </summary>
     private void ApplyPolarToStereoCamera()
     {
         if (stereoCameraRoot == null ||
@@ -1021,30 +1074,19 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         float radius =
             Mathf.Max(
                 orbitRadius,
                 0.001f
             );
 
-
         float thetaRad =
             orbitThetaDeg *
             Mathf.Deg2Rad;
 
-
         float azimuthRad =
             orbitAzimuthDeg *
             Mathf.Deg2Rad;
-
-
-        /*
-         * rを水平成分と垂直成分に分解
-         *
-         * horizontal = r cosθ
-         * vertical   = r sinθ
-         */
 
         float horizontalRadius =
             radius *
@@ -1052,64 +1094,36 @@ public class ImageController : MonoBehaviour
                 thetaRad
             );
 
-
         float verticalOffset =
             radius *
             Mathf.Sin(
                 thetaRad
             );
 
-
-        /*
-         * 水平成分を
-         * X / Zへ分解する。
-         */
-
         Vector3 offset =
             new Vector3(
-
                 horizontalRadius *
                 Mathf.Sin(
                     azimuthRad
                 ),
-
                 verticalOffset,
-
                 horizontalRadius *
                 Mathf.Cos(
                     azimuthRad
                 )
             );
 
-
         Vector3 targetWorldPosition =
             orbitCenter.position +
             offset;
 
-
-        // -----------------------------
-        // Camera移動
-        // -----------------------------
-
         stereoCameraRoot.position =
             targetWorldPosition;
-
-
-        /*
-         * 既存のXYZ UIなどは
-         * localPositionを使用しているので同期。
-         */
 
         stereoCameraPosition =
             stereoCameraRoot.localPosition;
 
-
-        // -----------------------------
-        // 光軸をネット中心へ向ける
-        // -----------------------------
-
         LookAtOrbitCenter();
-
 
         orbitInitialized =
             true;
@@ -1128,45 +1142,37 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-
         Vector3 direction =
             orbitCenter.position -
             stereoCameraRoot.position;
 
-
-        if (direction.sqrMagnitude <=
-            0.00000001f)
+        if (
+            direction.sqrMagnitude <=
+            0.00000001f
+        )
         {
             return;
         }
 
-
         Vector3 forward =
             direction.normalized;
-
 
         Vector3 up =
             Vector3.up;
 
-
-        /*
-         * CameraがNetCenterの真上/真下付近に来ると
-         * forwardとVector3.upがほぼ平行になる。
-         *
-         * LookRotationが不安定になるのを避ける。
-         */
-
-        if (Mathf.Abs(
-            Vector3.Dot(
-                forward,
-                up
-            )
-        ) > 0.999f)
+        if (
+            Mathf.Abs(
+                Vector3.Dot(
+                    forward,
+                    up
+                )
+            ) >
+            0.999f
+        )
         {
             up =
                 Vector3.forward;
         }
-
 
         stereoCameraRoot.rotation =
             Quaternion.LookRotation(
@@ -1174,21 +1180,13 @@ public class ImageController : MonoBehaviour
                 up
             );
 
-
-        /*
-         * LookRotationで決まった回転を
-         * 既存Pitch / Yawパラメータへ同期。
-         */
-
         Vector3 localEuler =
             stereoCameraRoot.localEulerAngles;
-
 
         stereoCameraRotationX =
             NormalizeAngle(
                 localEuler.x
             );
-
 
         stereoCameraRotationY =
             NormalizeAngle(
@@ -1213,7 +1211,6 @@ public class ImageController : MonoBehaviour
             return false;
         }
 
-
         if (orbitCenter == null)
         {
             Debug.LogWarning(
@@ -1225,12 +1222,10 @@ public class ImageController : MonoBehaviour
             return false;
         }
 
-
         if (!orbitInitialized)
         {
             SynchronizePolarFromCartesian();
         }
-
 
         return orbitInitialized;
     }
@@ -1245,14 +1240,11 @@ public class ImageController : MonoBehaviour
         Vector3 position =
             stereoCameraPosition;
 
-
         position.z =
             -position.z;
 
-
         stereoCameraPosition =
             position;
-
 
         stereoCameraRotationY =
             NormalizeAngle(
@@ -1260,13 +1252,9 @@ public class ImageController : MonoBehaviour
                 180.0f
             );
 
-
         ApplyStereoCameraTransform();
 
-
-        // XYZ変更後なので極座標も同期
         SynchronizePolarFromCartesian();
-
 
         Debug.Log(
             "[ImageController] Court Changed\n" +
@@ -1292,6 +1280,8 @@ public class ImageController : MonoBehaviour
         ApplyFocalLength();
 
         ApplyStereoCameraTransform();
+
+        ApplyFade();
     }
 
 
@@ -1306,17 +1296,14 @@ public class ImageController : MonoBehaviour
             leftCamera.targetTexture =
                 originalLeftTexture;
 
-
             leftCamera.sensorSize =
                 originalLeftSensorSize;
         }
-
 
         if (rightCamera != null)
         {
             rightCamera.targetTexture =
                 originalRightTexture;
-
 
             rightCamera.sensorSize =
                 originalRightSensorSize;
@@ -1334,26 +1321,21 @@ public class ImageController : MonoBehaviour
         {
             leftGuardTexture.Release();
 
-
             Destroy(
                 leftGuardTexture
             );
-
 
             leftGuardTexture =
                 null;
         }
 
-
         if (rightGuardTexture != null)
         {
             rightGuardTexture.Release();
 
-
             Destroy(
                 rightGuardTexture
             );
-
 
             rightGuardTexture =
                 null;
@@ -1372,20 +1354,17 @@ public class ImageController : MonoBehaviour
         angle %=
             360.0f;
 
-
         if (angle > 180.0f)
         {
             angle -=
                 360.0f;
         }
 
-
         if (angle <= -180.0f)
         {
             angle +=
                 360.0f;
         }
-
 
         return angle;
     }
