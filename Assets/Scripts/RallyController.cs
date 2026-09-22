@@ -598,6 +598,9 @@ public class RallyController : MonoBehaviour
     public float TossTargetZOffset =>
         tossTargetZOffset;
 
+    public float SetterTossApexHeight =>
+        setApexHeight;
+
     public ServeStartPosition CurrentServeStart =>
         selectedServeStart;
 
