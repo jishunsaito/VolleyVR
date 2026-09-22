@@ -12,6 +12,8 @@ using UnityEngine;
 /// Toss
 /// ↓
 /// Spike
+/// ↓
+/// Block (End Phase = Block のときのみ)
 ///
 /// Toss Target:
 /// LeftTossTarget / RightTossTarget
@@ -32,7 +34,8 @@ public class RallyController : MonoBehaviour
         Serve = 0,
         Receive = 1,
         Toss = 2,
-        Spike = 3
+        Spike = 3,
+        Block = 4
     }
 
     [Header("Simulation Range")]
@@ -119,9 +122,14 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
-    // Block Mode
+    // Block Mode (Legacy Compatibility)
     // ============================================================
 
+    /// <summary>
+    /// 旧UI / 既存コードとの互換用。
+    /// 現在は独立したBlock状態を保持せず、
+    /// End Phase == Block かどうかから導出する。
+    /// </summary>
     public enum BlockMode
     {
         None = 0,
@@ -181,6 +189,35 @@ public class RallyController : MonoBehaviour
     [SerializeField]
     private ServeTargetPosition selectedServeTarget =
         ServeTargetPosition.Center;
+
+
+    // ============================================================
+    // Serve Target Offset
+    // ============================================================
+
+    [Header("Serve Target Offset")]
+
+    [Tooltip("Serve Target Left の基準位置からのLocal Offset [m]")]
+    [SerializeField]
+    private Vector3 serveTargetLeftOffset =
+        Vector3.zero;
+
+    [Tooltip("Serve Target Center の基準位置からのLocal Offset [m]")]
+    [SerializeField]
+    private Vector3 serveTargetCenterOffset =
+        Vector3.zero;
+
+    [Tooltip("Serve Target Right の基準位置からのLocal Offset [m]")]
+    [SerializeField]
+    private Vector3 serveTargetRightOffset =
+        Vector3.zero;
+
+    private Vector3 serveTargetLeftBaseLocalPosition;
+    private Vector3 serveTargetCenterBaseLocalPosition;
+    private Vector3 serveTargetRightBaseLocalPosition;
+
+    private bool serveTargetBasePositionsCached =
+        false;
 
 
     // ============================================================
@@ -323,18 +360,11 @@ public class RallyController : MonoBehaviour
     // Block
     // ============================================================
 
-    [Header("Block")]
-
-    [Tooltip(
-        "ブロックを発生させるかどうか。" +
-        "Noneなら通常Spike Targetへ向かう。" +
-        "BlockならSpike Contact PointからBlock Contact Pointを必ず通り、" +
-        "接触後に一度停止してBlock Landing Pointへ向かう。"
-    )]
-    [SerializeField]
-    private BlockMode selectedBlockMode =
-        BlockMode.None;
-
+    /*
+     * Blockは独立したON/OFF状態を持たない。
+     * End Phase == PlayPhase.Block のときだけ、
+     * Spike Contact -> Block Contact -> Block Landing の軌道を使用する。
+     */
 
     [Header("Block Trajectory")]
 
@@ -486,6 +516,15 @@ public class RallyController : MonoBehaviour
         0.20f;
 
     [Tooltip(
+        "End Phase = Block のとき、ブロックありSpike開始から" +
+        "Fade Out開始までの時間 [s]"
+    )]
+    [Min(0.0f)]
+    [SerializeField]
+    private float blockFadeDelay =
+        0.20f;
+
+    [Tooltip(
         "Fade Outにかける時間 [s]。\n" +
         "0なら指定時刻で瞬時に完全遮蔽する。"
     )]
@@ -552,10 +591,36 @@ public class RallyController : MonoBehaviour
         selectedSpikeCourse;
 
     public BlockMode CurrentBlockMode =>
-        selectedBlockMode;
+        endPhase == PlayPhase.Block
+            ? BlockMode.Block
+            : BlockMode.None;
 
     public float TossTargetZOffset =>
         tossTargetZOffset;
+
+    public ServeStartPosition CurrentServeStart =>
+        selectedServeStart;
+
+    public ServeTargetPosition CurrentServeTarget =>
+        selectedServeTarget;
+
+    public float ServeTossHeight =>
+        tossHeight;
+
+    public float ServeHitHeight =>
+        serveHitHeight;
+
+    public float ServeTossForwardDistance =>
+        tossForwardDistance;
+
+    public float ServeSpeedKmh =>
+        serveSpeedKmh;
+
+    public float SpikeServeLaunchAngle =>
+        spikeServeLaunchAngle;
+
+    public float ServeFadeDelay =>
+        serveFadeDelay;
 
 
     // ============================================================
@@ -565,6 +630,9 @@ public class RallyController : MonoBehaviour
     private void Awake()
     {
         CachePlayRootRotation();
+
+        CacheServeTargetBasePositions();
+        ApplyAllServeTargetOffsets();
     }
 
     private void Start()
@@ -626,6 +694,14 @@ public class RallyController : MonoBehaviour
             );
         }
 
+        if (Input.GetKeyDown(KeyCode.Alpha6))
+        {
+            SelectSimulationRange(
+                PlayPhase.Serve,
+                PlayPhase.Block
+            );
+        }
+
         if (Input.GetKeyDown(KeyCode.V))
         {
             StartSelectedSimulation();
@@ -683,7 +759,7 @@ public class RallyController : MonoBehaviour
             Mathf.Clamp(
                 index,
                 0,
-                3
+                4
             );
 
         startPhase =
@@ -700,7 +776,7 @@ public class RallyController : MonoBehaviour
             Mathf.Clamp(
                 index,
                 0,
-                3
+                4
             );
 
         endPhase =
@@ -790,6 +866,15 @@ public class RallyController : MonoBehaviour
                 StartSpikeSequence();
 
                 break;
+
+
+            case PlayPhase.Block:
+
+                SpawnBallAtSelectedTossTarget();
+
+                StartSpikeSequence();
+
+                break;
         }
     }
 
@@ -832,6 +917,13 @@ public class RallyController : MonoBehaviour
 
 
             case PlayPhase.Spike:
+
+                SpawnBallAtSelectedTossTarget();
+
+                break;
+
+
+            case PlayPhase.Block:
 
                 SpawnBallAtSelectedTossTarget();
 
@@ -1439,10 +1531,22 @@ public class RallyController : MonoBehaviour
             return;
         }
 
-        if (
-            selectedBlockMode ==
-            BlockMode.Block
-        )
+        /*
+         * Blockの使用有無はEnd Phaseだけで決める。
+         *
+         * End = Spike
+         *   -> 通常Spike
+         *
+         * End = Block
+         *   -> Spike Contact -> Block Contact -> Block Landing
+         *
+         * 独立したBlock ON/OFF状態は持たない。
+         */
+        bool useBlock =
+            endPhase ==
+            PlayPhase.Block;
+
+        if (useBlock)
         {
             Transform blockContactPoint =
                 GetSelectedBlockContactPoint();
@@ -1456,7 +1560,7 @@ public class RallyController : MonoBehaviour
             )
             {
                 Debug.LogError(
-                    "[RallyController] Blockが選択されていますが、" +
+                    "[RallyController] End PhaseがBlockですが、" +
                     "Block Contact Point / Block Landing Pointが設定されていません。\n" +
                     $"Toss Side = {selectedTossSide}"
                 );
@@ -1465,10 +1569,10 @@ public class RallyController : MonoBehaviour
             }
 
             Debug.Log(
-                "[RallyController] Spike Start With Block\n" +
+                "[RallyController] Block Sequence Start\n" +
+                $"End Phase = {endPhase}\n" +
                 $"Toss Side = {selectedTossSide}\n" +
                 $"Course = {selectedSpikeCourse}\n" +
-                $"Block = {selectedBlockMode}\n" +
                 $"Spike Contact Position = " +
                 $"{currentBallPhysics.transform.position}\n" +
                 $"Block Contact Point = {blockContactPoint.name}\n" +
@@ -1481,8 +1585,12 @@ public class RallyController : MonoBehaviour
                 $"Block Spin = {blockSpinRpm:F1} rpm"
             );
 
+            /*
+             * End PhaseがBlockなので、FadeもBlock条件として扱う。
+             * blockFadeDelayはSpikeWithBlock開始時点から数える。
+             */
             NotifyPhaseStarted(
-                PlayPhase.Spike
+                PlayPhase.Block
             );
 
             currentBallPhysics.SpikeWithBlock(
@@ -1512,9 +1620,9 @@ public class RallyController : MonoBehaviour
 
         Debug.Log(
             "[RallyController] Spike Start\n" +
+            $"End Phase = {endPhase}\n" +
             $"Toss Side = {selectedTossSide}\n" +
             $"Course = {selectedSpikeCourse}\n" +
-            $"Block = {selectedBlockMode}\n" +
             $"Contact Position = " +
             $"{currentBallPhysics.transform.position}\n" +
             $"Target = {spikeTarget.name}\n" +
@@ -1532,6 +1640,7 @@ public class RallyController : MonoBehaviour
         );
     }
 
+
     private void HandleSpikeReachedTarget()
     {
         if (currentBallPhysics == null)
@@ -1540,8 +1649,8 @@ public class RallyController : MonoBehaviour
         }
 
         if (
-            selectedBlockMode ==
-            BlockMode.Block
+            endPhase ==
+            PlayPhase.Block
         )
         {
             Transform blockLandingPoint =
@@ -1556,22 +1665,26 @@ public class RallyController : MonoBehaviour
                 $"Ball Position = " +
                 $"{currentBallPhysics.transform.position}"
             );
-        }
-        else
-        {
-            Transform spikeTarget =
-                GetSelectedSpikeTarget();
 
             Debug.Log(
-                "[RallyController] Spike Target Reached\n" +
-                $"Toss Side = {selectedTossSide}\n" +
-                $"Course = {selectedSpikeCourse}\n" +
-                $"Target = " +
-                $"{(spikeTarget != null ? spikeTarget.name : "null")}\n" +
-                $"Ball Position = " +
-                $"{currentBallPhysics.transform.position}"
+                "[RallyController] Simulation Finished at Block."
             );
+
+            return;
         }
+
+        Transform spikeTarget =
+            GetSelectedSpikeTarget();
+
+        Debug.Log(
+            "[RallyController] Spike Target Reached\n" +
+            $"Toss Side = {selectedTossSide}\n" +
+            $"Course = {selectedSpikeCourse}\n" +
+            $"Target = " +
+            $"{(spikeTarget != null ? spikeTarget.name : "null")}\n" +
+            $"Ball Position = " +
+            $"{currentBallPhysics.transform.position}"
+        );
 
         Debug.Log(
             "[RallyController] Simulation Finished at Spike."
@@ -1622,6 +1735,91 @@ public class RallyController : MonoBehaviour
 
         selectedServeTarget =
             (ServeTargetPosition)index;
+    }
+
+    public void SetServeTargetOffset(
+        int index,
+        Vector3 offset
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                2
+            );
+
+        ServeTargetPosition targetPosition =
+            (ServeTargetPosition)index;
+
+        switch (targetPosition)
+        {
+            case ServeTargetPosition.Left:
+
+                serveTargetLeftOffset =
+                    offset;
+
+                break;
+
+            case ServeTargetPosition.Center:
+
+                serveTargetCenterOffset =
+                    offset;
+
+                break;
+
+            case ServeTargetPosition.Right:
+
+                serveTargetRightOffset =
+                    offset;
+
+                break;
+        }
+
+        ApplyServeTargetOffset(
+            targetPosition
+        );
+    }
+
+    public Vector3 GetServeTargetOffset(
+        int index
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                2
+            );
+
+        switch ((ServeTargetPosition)index)
+        {
+            case ServeTargetPosition.Left:
+                return serveTargetLeftOffset;
+
+            case ServeTargetPosition.Center:
+                return serveTargetCenterOffset;
+
+            case ServeTargetPosition.Right:
+                return serveTargetRightOffset;
+
+            default:
+                return Vector3.zero;
+        }
+    }
+
+    public void ResetServeTargetOffsets()
+    {
+        serveTargetLeftOffset =
+            Vector3.zero;
+
+        serveTargetCenterOffset =
+            Vector3.zero;
+
+        serveTargetRightOffset =
+            Vector3.zero;
+
+        ApplyAllServeTargetOffsets();
     }
 
     public void SetTossSide(
@@ -1689,6 +1887,10 @@ public class RallyController : MonoBehaviour
             (SpikeCourse)index;
     }
 
+    /// <summary>
+    /// 旧UI互換用。
+    /// Blockの独立状態は持たず、End PhaseをSpike / Blockへ切り替える。
+    /// </summary>
     public void SetBlockMode(
         int index
     )
@@ -1700,18 +1902,29 @@ public class RallyController : MonoBehaviour
                 1
             );
 
-        selectedBlockMode =
-            (BlockMode)index;
+        endPhase =
+            index == 1
+                ? PlayPhase.Block
+                : PlayPhase.Spike;
+
+        ValidateSimulationRange();
     }
 
+    /// <summary>
+    /// 旧Toggle互換用。
+    /// true = End Phase Block
+    /// false = End Phase Spike
+    /// </summary>
     public void SetBlockEnabled(
         bool enabled
     )
     {
-        selectedBlockMode =
+        endPhase =
             enabled
-                ? BlockMode.Block
-                : BlockMode.None;
+                ? PlayPhase.Block
+                : PlayPhase.Spike;
+
+        ValidateSimulationRange();
     }
 
     public void SetBlockContactFixedFrames(
@@ -1893,6 +2106,17 @@ public class RallyController : MonoBehaviour
             );
     }
 
+    public void SetBlockFadeDelay(
+        float seconds
+    )
+    {
+        blockFadeDelay =
+            Mathf.Max(
+                0.0f,
+                seconds
+            );
+    }
+
     public void SetFadeDuration(
         float seconds
     )
@@ -2027,6 +2251,13 @@ public class RallyController : MonoBehaviour
                         spikeFadeDelay
                     );
 
+            case PlayPhase.Block:
+                return
+                    Mathf.Max(
+                        0.0f,
+                        blockFadeDelay
+                    );
+
             default:
                 return 0.0f;
         }
@@ -2082,6 +2313,96 @@ public class RallyController : MonoBehaviour
 
             default:
                 return serveStartCenter;
+        }
+    }
+
+
+    // ============================================================
+    // Serve Target Offset
+    // ============================================================
+
+    private void CacheServeTargetBasePositions()
+    {
+        if (serveTargetLeft != null)
+        {
+            serveTargetLeftBaseLocalPosition =
+                serveTargetLeft.localPosition;
+        }
+
+        if (serveTargetCenter != null)
+        {
+            serveTargetCenterBaseLocalPosition =
+                serveTargetCenter.localPosition;
+        }
+
+        if (serveTargetRight != null)
+        {
+            serveTargetRightBaseLocalPosition =
+                serveTargetRight.localPosition;
+        }
+
+        serveTargetBasePositionsCached =
+            true;
+    }
+
+    private void ApplyAllServeTargetOffsets()
+    {
+        ApplyServeTargetOffset(
+            ServeTargetPosition.Left
+        );
+
+        ApplyServeTargetOffset(
+            ServeTargetPosition.Center
+        );
+
+        ApplyServeTargetOffset(
+            ServeTargetPosition.Right
+        );
+    }
+
+    private void ApplyServeTargetOffset(
+        ServeTargetPosition targetPosition
+    )
+    {
+        if (!serveTargetBasePositionsCached)
+        {
+            CacheServeTargetBasePositions();
+        }
+
+        switch (targetPosition)
+        {
+            case ServeTargetPosition.Left:
+
+                if (serveTargetLeft != null)
+                {
+                    serveTargetLeft.localPosition =
+                        serveTargetLeftBaseLocalPosition +
+                        serveTargetLeftOffset;
+                }
+
+                break;
+
+            case ServeTargetPosition.Center:
+
+                if (serveTargetCenter != null)
+                {
+                    serveTargetCenter.localPosition =
+                        serveTargetCenterBaseLocalPosition +
+                        serveTargetCenterOffset;
+                }
+
+                break;
+
+            case ServeTargetPosition.Right:
+
+                if (serveTargetRight != null)
+                {
+                    serveTargetRight.localPosition =
+                        serveTargetRightBaseLocalPosition +
+                        serveTargetRightOffset;
+                }
+
+                break;
         }
     }
 

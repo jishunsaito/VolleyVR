@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,6 +18,25 @@ public class UIController : MonoBehaviour
 
     [SerializeField]
     private RallyController rallyController;
+
+
+    // =========================================================
+    // Play Selection / Start
+    // =========================================================
+
+    [Header("Play Selection")]
+
+    [Tooltip("提示を開始するPlay Phaseを選択するDropdown")]
+    [SerializeField]
+    private TMP_Dropdown startPlayDropdown;
+
+    [Tooltip("提示を終了するPlay Phaseを選択するDropdown")]
+    [SerializeField]
+    private TMP_Dropdown endPlayDropdown;
+
+    [Tooltip("選択したStart / End Phaseでシミュレーションを開始するButton")]
+    [SerializeField]
+    private Button startButton;
 
 
     // =========================================================
@@ -256,6 +276,10 @@ public class UIController : MonoBehaviour
 
         BindCourtChange();
 
+        BindPlaySelection();
+
+        BindStartButton();
+
 
         UpdateOutputText();
     }
@@ -281,6 +305,223 @@ public class UIController : MonoBehaviour
                 OnCourtChangeButtonClicked
             );
         }
+
+        if (startPlayDropdown != null)
+        {
+            startPlayDropdown.onValueChanged.RemoveListener(
+                OnStartPlayChanged
+            );
+        }
+
+        if (endPlayDropdown != null)
+        {
+            endPlayDropdown.onValueChanged.RemoveListener(
+                OnEndPlayChanged
+            );
+        }
+
+        if (startButton != null)
+        {
+            startButton.onClick.RemoveListener(
+                OnStartButtonClicked
+            );
+        }
+    }
+
+
+    // =========================================================
+    // Play Selection / Start
+    // =========================================================
+
+    private void BindPlaySelection()
+    {
+        if (rallyController == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにRallyControllerが設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        List<string> playOptions =
+            new List<string>
+            {
+                "Serve",
+                "Receive",
+                "Toss",
+                "Spike",
+                "Block"
+            };
+
+        if (startPlayDropdown != null)
+        {
+            startPlayDropdown.ClearOptions();
+            startPlayDropdown.AddOptions(
+                playOptions
+            );
+
+            startPlayDropdown.SetValueWithoutNotify(
+                Mathf.Clamp(
+                    (int)rallyController.StartPhase,
+                    0,
+                    playOptions.Count - 1
+                )
+            );
+
+            startPlayDropdown.RefreshShownValue();
+
+            startPlayDropdown.onValueChanged.AddListener(
+                OnStartPlayChanged
+            );
+        }
+        else
+        {
+            Debug.LogWarning(
+                "UIControllerにStartPlay Dropdownが設定されていません。",
+                this
+            );
+        }
+
+        if (endPlayDropdown != null)
+        {
+            endPlayDropdown.ClearOptions();
+            endPlayDropdown.AddOptions(
+                playOptions
+            );
+
+            endPlayDropdown.SetValueWithoutNotify(
+                Mathf.Clamp(
+                    (int)rallyController.EndPhase,
+                    0,
+                    playOptions.Count - 1
+                )
+            );
+
+            endPlayDropdown.RefreshShownValue();
+
+            endPlayDropdown.onValueChanged.AddListener(
+                OnEndPlayChanged
+            );
+        }
+        else
+        {
+            Debug.LogWarning(
+                "UIControllerにEndPlay Dropdownが設定されていません。",
+                this
+            );
+        }
+
+        RefreshPlaySelectionFromController();
+    }
+
+    private void BindStartButton()
+    {
+        if (startButton == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにStart Buttonが設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        if (rallyController == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにRallyControllerが設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        startButton.onClick.AddListener(
+            OnStartButtonClicked
+        );
+    }
+
+    private void OnStartPlayChanged(
+        int index
+    )
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        rallyController.SetStartPhase(
+            index
+        );
+
+        /*
+         * Start > Endになった場合、
+         * RallyController側でEndがStartへ補正されるため、
+         * Dropdown表示も実際の値へ合わせる。
+         */
+        RefreshPlaySelectionFromController();
+    }
+
+    private void OnEndPlayChanged(
+        int index
+    )
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        rallyController.SetEndPhase(
+            index
+        );
+
+        /*
+         * 不正なStart / Endの組み合わせが補正された場合に
+         * Dropdown表示を同期する。
+         */
+        RefreshPlaySelectionFromController();
+    }
+
+    private void RefreshPlaySelectionFromController()
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        if (startPlayDropdown != null)
+        {
+            startPlayDropdown.SetValueWithoutNotify(
+                (int)rallyController.StartPhase
+            );
+
+            startPlayDropdown.RefreshShownValue();
+        }
+
+        if (endPlayDropdown != null)
+        {
+            endPlayDropdown.SetValueWithoutNotify(
+                (int)rallyController.EndPhase
+            );
+
+            endPlayDropdown.RefreshShownValue();
+        }
+    }
+
+    private void OnStartButtonClicked()
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        /*
+         * Vキーと同じ処理を直接呼ぶ。
+         * Input.GetKeyDownを擬似的に発生させる必要はない。
+         */
+        rallyController.StartSelectedSimulation();
     }
 
 
