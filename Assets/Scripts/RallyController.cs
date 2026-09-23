@@ -357,6 +357,29 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
+    // Spike Target Offset
+    // ============================================================
+
+    [Header("Spike Target Offset")]
+
+    [Tooltip("Spike Target Left の基準位置からのLocal Offset [m]")]
+    [SerializeField]
+    private Vector3 spikeTargetLeftOffset =
+        Vector3.zero;
+
+    [Tooltip("Spike Target Right の基準位置からのLocal Offset [m]")]
+    [SerializeField]
+    private Vector3 spikeTargetRightOffset =
+        Vector3.zero;
+
+    private Vector3 spikeTargetLeftBaseLocalPosition;
+    private Vector3 spikeTargetRightBaseLocalPosition;
+
+    private bool spikeTargetBasePositionsCached =
+        false;
+
+
+    // ============================================================
     // Block
     // ============================================================
 
@@ -395,6 +418,29 @@ public class RallyController : MonoBehaviour
     )]
     [SerializeField]
     private Transform blockLandingPointRight;
+
+
+    // ============================================================
+    // Block Landing Point Offset
+    // ============================================================
+
+    [Header("Block Landing Point Offset")]
+
+    [Tooltip("Block Landing Point Left の基準位置からのLocal Offset [m]")]
+    [SerializeField]
+    private Vector3 blockLandingPointLeftOffset =
+        Vector3.zero;
+
+    [Tooltip("Block Landing Point Right の基準位置からのLocal Offset [m]")]
+    [SerializeField]
+    private Vector3 blockLandingPointRightOffset =
+        Vector3.zero;
+
+    private Vector3 blockLandingPointLeftBaseLocalPosition;
+    private Vector3 blockLandingPointRightBaseLocalPosition;
+
+    private bool blockLandingPointBasePositionsCached =
+        false;
 
     [Tooltip(
         "Block Contact Pointで停止するFixedUpdate数。" +
@@ -590,6 +636,21 @@ public class RallyController : MonoBehaviour
     public SpikeCourse CurrentSpikeCourse =>
         selectedSpikeCourse;
 
+    public float SpikeSpeedKmh =>
+        spikeSpeedKmh;
+
+    public float SpikeFadeDelay =>
+        spikeFadeDelay;
+
+    public float BlockExitSpeedKmh =>
+        blockExitSpeedKmh;
+
+    public float BlockSpinRpm =>
+        blockSpinRpm;
+
+    public float BlockFadeDelay =>
+        blockFadeDelay;
+
     public BlockMode CurrentBlockMode =>
         endPhase == PlayPhase.Block
             ? BlockMode.Block
@@ -636,6 +697,12 @@ public class RallyController : MonoBehaviour
 
         CacheServeTargetBasePositions();
         ApplyAllServeTargetOffsets();
+
+        CacheSpikeTargetBasePositions();
+        ApplyAllSpikeTargetOffsets();
+
+        CacheBlockLandingPointBasePositions();
+        ApplyAllBlockLandingPointOffsets();
     }
 
     private void Start()
@@ -1890,6 +1957,62 @@ public class RallyController : MonoBehaviour
             (SpikeCourse)index;
     }
 
+    public void SetSpikeTargetOffset(
+        int index,
+        Vector3 offset
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        if (index == 0)
+        {
+            spikeTargetLeftOffset =
+                offset;
+        }
+        else
+        {
+            spikeTargetRightOffset =
+                offset;
+        }
+
+        ApplySpikeTargetOffset(
+            index
+        );
+    }
+
+    public Vector3 GetSpikeTargetOffset(
+        int index
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        return
+            index == 0
+                ? spikeTargetLeftOffset
+                : spikeTargetRightOffset;
+    }
+
+    public void ResetSpikeTargetOffsets()
+    {
+        spikeTargetLeftOffset =
+            Vector3.zero;
+
+        spikeTargetRightOffset =
+            Vector3.zero;
+
+        ApplyAllSpikeTargetOffsets();
+    }
+
     /// <summary>
     /// 旧UI互換用。
     /// Blockの独立状態は持たず、End PhaseをSpike / Blockへ切り替える。
@@ -1958,6 +2081,62 @@ public class RallyController : MonoBehaviour
     {
         blockSpinRpm =
             rpm;
+    }
+
+    public void SetBlockLandingPointOffset(
+        int index,
+        Vector3 offset
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        if (index == 0)
+        {
+            blockLandingPointLeftOffset =
+                offset;
+        }
+        else
+        {
+            blockLandingPointRightOffset =
+                offset;
+        }
+
+        ApplyBlockLandingPointOffset(
+            index
+        );
+    }
+
+    public Vector3 GetBlockLandingPointOffset(
+        int index
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        return
+            index == 0
+                ? blockLandingPointLeftOffset
+                : blockLandingPointRightOffset;
+    }
+
+    public void ResetBlockLandingPointOffsets()
+    {
+        blockLandingPointLeftOffset =
+            Vector3.zero;
+
+        blockLandingPointRightOffset =
+            Vector3.zero;
+
+        ApplyAllBlockLandingPointOffsets();
     }
 
     public void SetSpikeSpeed(
@@ -2481,6 +2660,76 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
+    // Spike Target Offset
+    // ============================================================
+
+    private void CacheSpikeTargetBasePositions()
+    {
+        if (spikeTargetLeft != null)
+        {
+            spikeTargetLeftBaseLocalPosition =
+                spikeTargetLeft.localPosition;
+        }
+
+        if (spikeTargetRight != null)
+        {
+            spikeTargetRightBaseLocalPosition =
+                spikeTargetRight.localPosition;
+        }
+
+        spikeTargetBasePositionsCached =
+            true;
+    }
+
+    private void ApplyAllSpikeTargetOffsets()
+    {
+        ApplySpikeTargetOffset(
+            0
+        );
+
+        ApplySpikeTargetOffset(
+            1
+        );
+    }
+
+    private void ApplySpikeTargetOffset(
+        int index
+    )
+    {
+        if (!spikeTargetBasePositionsCached)
+        {
+            CacheSpikeTargetBasePositions();
+        }
+
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        if (index == 0)
+        {
+            if (spikeTargetLeft != null)
+            {
+                spikeTargetLeft.localPosition =
+                    spikeTargetLeftBaseLocalPosition +
+                    spikeTargetLeftOffset;
+            }
+
+            return;
+        }
+
+        if (spikeTargetRight != null)
+        {
+            spikeTargetRight.localPosition =
+                spikeTargetRightBaseLocalPosition +
+                spikeTargetRightOffset;
+        }
+    }
+
+
+    // ============================================================
     // Spike Target Selection
     // ============================================================
 
@@ -2503,6 +2752,76 @@ public class RallyController : MonoBehaviour
             SpikeCourse.Straight
                 ? spikeTargetLeft
                 : spikeTargetRight;
+    }
+
+
+    // ============================================================
+    // Block Landing Point Offset
+    // ============================================================
+
+    private void CacheBlockLandingPointBasePositions()
+    {
+        if (blockLandingPointLeft != null)
+        {
+            blockLandingPointLeftBaseLocalPosition =
+                blockLandingPointLeft.localPosition;
+        }
+
+        if (blockLandingPointRight != null)
+        {
+            blockLandingPointRightBaseLocalPosition =
+                blockLandingPointRight.localPosition;
+        }
+
+        blockLandingPointBasePositionsCached =
+            true;
+    }
+
+    private void ApplyAllBlockLandingPointOffsets()
+    {
+        ApplyBlockLandingPointOffset(
+            0
+        );
+
+        ApplyBlockLandingPointOffset(
+            1
+        );
+    }
+
+    private void ApplyBlockLandingPointOffset(
+        int index
+    )
+    {
+        if (!blockLandingPointBasePositionsCached)
+        {
+            CacheBlockLandingPointBasePositions();
+        }
+
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        if (index == 0)
+        {
+            if (blockLandingPointLeft != null)
+            {
+                blockLandingPointLeft.localPosition =
+                    blockLandingPointLeftBaseLocalPosition +
+                    blockLandingPointLeftOffset;
+            }
+
+            return;
+        }
+
+        if (blockLandingPointRight != null)
+        {
+            blockLandingPointRight.localPosition =
+                blockLandingPointRightBaseLocalPosition +
+                blockLandingPointRightOffset;
+        }
     }
 
 
