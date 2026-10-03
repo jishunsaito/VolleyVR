@@ -40,6 +40,17 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
+    // Experiment Fade
+    // =========================================================
+
+    [Header("Experiment Fade")]
+
+    [Tooltip("実験用FadeのON / OFFを切り替えるToggle")]
+    [SerializeField]
+    private Toggle experimentFadeToggle;
+
+
+    // =========================================================
     // Court Change
     // =========================================================
 
@@ -280,6 +291,8 @@ public class UIController : MonoBehaviour
 
         BindStartButton();
 
+        BindExperimentFadeToggle();
+
 
         UpdateOutputText();
     }
@@ -324,6 +337,13 @@ public class UIController : MonoBehaviour
         {
             startButton.onClick.RemoveListener(
                 OnStartButtonClicked
+            );
+        }
+
+        if (experimentFadeToggle != null)
+        {
+            experimentFadeToggle.onValueChanged.RemoveListener(
+                OnExperimentFadeToggleChanged
             );
         }
     }
@@ -522,6 +542,64 @@ public class UIController : MonoBehaviour
          * Input.GetKeyDownを擬似的に発生させる必要はない。
          */
         rallyController.StartSelectedSimulation();
+    }
+
+
+    // =========================================================
+    // Experiment Fade
+    // =========================================================
+
+    private void BindExperimentFadeToggle()
+    {
+        if (experimentFadeToggle == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにExperiment Fade Toggleが設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        if (rallyController == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにRallyControllerが設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        /*
+         * ToggleのInspector上の初期値を
+         * RallyControllerのFade ON / OFFへ反映する。
+         *
+         * ON  : End Phase開始後、各PhaseのFade Delayに従ってFadeする。
+         * OFF : Fade Timerを無効化し、RallyController側でFade状態もResetされる。
+         */
+        rallyController.SetExperimentFadeEnabled(
+            experimentFadeToggle.isOn
+        );
+
+        experimentFadeToggle.onValueChanged.AddListener(
+            OnExperimentFadeToggleChanged
+        );
+    }
+
+
+    private void OnExperimentFadeToggleChanged(
+        bool enabled
+    )
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        rallyController.SetExperimentFadeEnabled(
+            enabled
+        );
     }
 
 

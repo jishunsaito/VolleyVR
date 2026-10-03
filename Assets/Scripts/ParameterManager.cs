@@ -11,7 +11,7 @@ using UnityEditor;
 public class ParameterManager : MonoBehaviour
 {
     // =========================================================
-    // QÆ
+    // ï¿½Qï¿½ï¿½
     // =========================================================
 
     [Header("Controllers")]
@@ -40,7 +40,7 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // •Û‘¶İ’è
+    // ï¿½Û‘ï¿½ï¿½İ’ï¿½
     // =========================================================
 
     [Header("Save Settings")]
@@ -55,14 +55,14 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // “à•”ƒf[ƒ^
+    // ï¿½ï¿½ï¿½ï¿½ï¿½fï¿½[ï¿½^
     // =========================================================
 
     private ParameterPreset initialPreset;
 
 
     /// <summary>
-    /// ƒpƒ‰ƒ[ƒ^•Û‘¶ê—pƒfƒBƒŒƒNƒgƒŠ
+    /// ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½Û‘ï¿½ï¿½ï¿½pï¿½fï¿½Bï¿½ï¿½ï¿½Nï¿½gï¿½ï¿½
     /// </summary>
     private string PresetDirectory
     {
@@ -77,7 +77,7 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // UnityƒCƒxƒ“ƒg
+    // Unityï¿½Cï¿½xï¿½ï¿½ï¿½g
     // =========================================================
 
     private void Awake()
@@ -85,8 +85,8 @@ public class ParameterManager : MonoBehaviour
         if (imageController == null)
         {
             Debug.LogError(
-                "ParameterPresetManager‚É" +
-                "ImageController‚ªİ’è‚³‚ê‚Ä‚¢‚Ü‚¹‚ñB",
+                "ParameterPresetManagerï¿½ï¿½" +
+                "ImageControllerï¿½ï¿½ï¿½İ’è‚³ï¿½ï¿½Ä‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½B",
                 this
             );
 
@@ -94,12 +94,12 @@ public class ParameterManager : MonoBehaviour
             return;
         }
 
-        // •Û‘¶—pƒtƒHƒ‹ƒ_‚ğì¬
+        // ï¿½Û‘ï¿½ï¿½pï¿½tï¿½Hï¿½ï¿½ï¿½_ï¿½ï¿½ï¿½ì¬
         Directory.CreateDirectory(
             PresetDirectory
         );
 
-        // PlayŠJn‚Ì’l‚ğReset—p‚Æ‚µ‚Ä‹L˜^
+        // Playï¿½Jï¿½nï¿½ï¿½ï¿½Ì’lï¿½ï¿½Resetï¿½pï¿½Æ‚ï¿½ï¿½Ä‹Lï¿½^
         initialPreset =
             CaptureCurrentParameters();
 
@@ -113,7 +113,7 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // ButtonÚ‘±
+    // Buttonï¿½Ú‘ï¿½
     // =========================================================
 
     private void BindButtons()
@@ -170,14 +170,14 @@ public class ParameterManager : MonoBehaviour
     // =========================================================
 
     /// <summary>
-    /// PlayŠJn‚Ìƒpƒ‰ƒ[ƒ^‚Ö–ß‚·
+    /// Playï¿½Jï¿½nï¿½ï¿½ï¿½Ìƒpï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½Ö–ß‚ï¿½
     /// </summary>
     public void ResetParameters()
     {
         if (initialPreset == null)
         {
             Debug.LogWarning(
-                "‰Šúƒpƒ‰ƒ[ƒ^‚ª‹L˜^‚³‚ê‚Ä‚¢‚Ü‚¹‚ñB",
+                "ï¿½ï¿½ï¿½ï¿½ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½ï¿½ï¿½Lï¿½^ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½B",
                 this
             );
 
@@ -187,7 +187,7 @@ public class ParameterManager : MonoBehaviour
         ApplyPreset(initialPreset);
 
         Debug.Log(
-            "ƒpƒ‰ƒ[ƒ^‚ğPlayŠJn‚Ì’l‚Ö–ß‚µ‚Ü‚µ‚½B",
+            "ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½ï¿½Playï¿½Jï¿½nï¿½ï¿½ï¿½Ì’lï¿½Ö–ß‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½ï¿½B",
             this
         );
     }
@@ -205,7 +205,7 @@ public class ParameterManager : MonoBehaviour
         string path =
             SelectSaveFilePath();
 
-        // ƒLƒƒƒ“ƒZƒ‹
+        // ï¿½Lï¿½ï¿½ï¿½ï¿½ï¿½Zï¿½ï¿½
         if (string.IsNullOrWhiteSpace(path))
         {
             return;
@@ -234,7 +234,7 @@ public class ParameterManager : MonoBehaviour
             );
 
             Debug.Log(
-                "ƒpƒ‰ƒ[ƒ^‚ğ•Û‘¶‚µ‚Ü‚µ‚½B\n" +
+                "ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½ï¿½Û‘ï¿½ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½ï¿½B\n" +
                 path,
                 this
             );
@@ -242,7 +242,7 @@ public class ParameterManager : MonoBehaviour
         catch (Exception exception)
         {
             Debug.LogError(
-                "ƒpƒ‰ƒ[ƒ^‚Ì•Û‘¶‚É¸”s‚µ‚Ü‚µ‚½B\n" +
+                "ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½Ì•Û‘ï¿½ï¿½Éï¿½ï¿½sï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½ï¿½B\n" +
                 exception.Message,
                 this
             );
@@ -259,7 +259,7 @@ public class ParameterManager : MonoBehaviour
         string path =
             SelectLoadFilePath();
 
-        // ƒLƒƒƒ“ƒZƒ‹‚Ü‚½‚Íƒtƒ@ƒCƒ‹‚È‚µ
+        // ï¿½Lï¿½ï¿½ï¿½ï¿½ï¿½Zï¿½ï¿½ï¿½Ü‚ï¿½ï¿½Íƒtï¿½@ï¿½Cï¿½ï¿½ï¿½È‚ï¿½
         if (string.IsNullOrWhiteSpace(path))
         {
             return;
@@ -268,7 +268,7 @@ public class ParameterManager : MonoBehaviour
         if (!File.Exists(path))
         {
             Debug.LogError(
-                "‘I‘ğ‚µ‚½ƒtƒ@ƒCƒ‹‚ª‘¶İ‚µ‚Ü‚¹‚ñB\n" +
+                "ï¿½Iï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½İ‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½B\n" +
                 path,
                 this
             );
@@ -287,7 +287,7 @@ public class ParameterManager : MonoBehaviour
             if (string.IsNullOrWhiteSpace(json))
             {
                 Debug.LogError(
-                    "‘I‘ğ‚µ‚½JSONƒtƒ@ƒCƒ‹‚ª‹ó‚Å‚·B",
+                    "ï¿½Iï¿½ï¿½ï¿½ï¿½ï¿½ï¿½JSONï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å‚ï¿½ï¿½B",
                     this
                 );
 
@@ -302,7 +302,7 @@ public class ParameterManager : MonoBehaviour
             if (preset == null)
             {
                 Debug.LogError(
-                    "JSON‚ğƒpƒ‰ƒ[ƒ^‚Ö•ÏŠ·‚Å‚«‚Ü‚¹‚ñ‚Å‚µ‚½B",
+                    "JSONï¿½ï¿½ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½Ö•ÏŠï¿½ï¿½Å‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½Å‚ï¿½ï¿½ï¿½ï¿½B",
                     this
                 );
 
@@ -312,7 +312,7 @@ public class ParameterManager : MonoBehaviour
             if (preset.formatVersion <= 0)
             {
                 Debug.LogError(
-                    "‘Î‰‚µ‚Ä‚¢‚È‚¢ƒpƒ‰ƒ[ƒ^ƒtƒ@ƒCƒ‹‚Å‚·B",
+                    "ï¿½Î‰ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½È‚ï¿½ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½Å‚ï¿½ï¿½B",
                     this
                 );
 
@@ -322,7 +322,7 @@ public class ParameterManager : MonoBehaviour
             ApplyPreset(preset);
 
             Debug.Log(
-                "ƒpƒ‰ƒ[ƒ^‚ğ“Ç‚İ‚İ‚Ü‚µ‚½B\n" +
+                "ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½ï¿½Ç‚İï¿½ï¿½İ‚Ü‚ï¿½ï¿½ï¿½ï¿½B\n" +
                 path,
                 this
             );
@@ -330,7 +330,7 @@ public class ParameterManager : MonoBehaviour
         catch (Exception exception)
         {
             Debug.LogError(
-                "ƒpƒ‰ƒ[ƒ^‚Ì“Ç‚É¸”s‚µ‚Ü‚µ‚½B\n" +
+                "ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½Ì“Çï¿½ï¿½Éï¿½ï¿½sï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½ï¿½B\n" +
                 exception.Message,
                 this
             );
@@ -339,7 +339,7 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // Œ»İ‚Ìƒpƒ‰ƒ[ƒ^‚ğæ“¾
+    // ï¿½ï¿½ï¿½İ‚Ìƒpï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½ï¿½ï¿½æ“¾
     // =========================================================
 
     private ParameterPreset CaptureCurrentParameters()
@@ -372,7 +372,7 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // ƒpƒ‰ƒ[ƒ^‚ğImageController‚Ö“K—p
+    // ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½ï¿½ImageControllerï¿½Ö“Kï¿½p
     // =========================================================
 
     private void ApplyPreset(
@@ -394,7 +394,7 @@ public class ParameterManager : MonoBehaviour
         imageController.stereoCameraRotationX =
             preset.stereoCameraRotationX;
 
-        // Slider‚ÆInputField‚àXV
+        // Sliderï¿½ï¿½InputFieldï¿½ï¿½ï¿½Xï¿½V
         if (uiController != null)
         {
             uiController.RefreshFromController();
@@ -403,7 +403,7 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // •Û‘¶ƒtƒ@ƒCƒ‹‘I‘ğ
+    // ï¿½Û‘ï¿½ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½Iï¿½ï¿½
     // =========================================================
 
     private string SelectSaveFilePath()
@@ -443,7 +443,7 @@ public class ParameterManager : MonoBehaviour
 
 #else
 
-        // Build”Å‚Å‚Í“ú•t‚«ƒtƒ@ƒCƒ‹–¼‚Å©“®•Û‘¶
+        // Buildï¿½Å‚Å‚Í“ï¿½ï¿½ï¿½ï¿½tï¿½ï¿½ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½Åï¿½ï¿½ï¿½ï¿½Û‘ï¿½
         return Path.Combine(
             PresetDirectory,
             fileName + ".json"
@@ -454,7 +454,7 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // “Çƒtƒ@ƒCƒ‹‘I‘ğ
+    // ï¿½Çï¿½ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½Iï¿½ï¿½
     // =========================================================
 
     private string SelectLoadFilePath()
@@ -470,8 +470,8 @@ public class ParameterManager : MonoBehaviour
 #else
 
         /*
-         * Build”Å‚Å‚Íê—pƒtƒHƒ‹ƒ_“à‚Ì
-         * ÅVJSONƒtƒ@ƒCƒ‹‚ğ“Ç‚İ‚ŞB
+         * Buildï¿½Å‚Å‚Íï¿½pï¿½tï¿½Hï¿½ï¿½ï¿½_ï¿½ï¿½ï¿½ï¿½
+         * ï¿½ÅVJSONï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½Ç‚İï¿½ï¿½ŞB
          */
         return FindLatestPresetPath();
 
@@ -480,8 +480,8 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // ÅV‚Ì•Û‘¶ƒtƒ@ƒCƒ‹‚ğæ“¾
-    // Build”Å‚ÌLoad‚Åg—p
+    // ï¿½ÅVï¿½Ì•Û‘ï¿½ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½æ“¾
+    // Buildï¿½Å‚ï¿½Loadï¿½Ågï¿½p
     // =========================================================
 
     private string FindLatestPresetPath()
@@ -489,7 +489,7 @@ public class ParameterManager : MonoBehaviour
         if (!Directory.Exists(PresetDirectory))
         {
             Debug.LogWarning(
-                "•Û‘¶ƒtƒHƒ‹ƒ_‚ª‘¶İ‚µ‚Ü‚¹‚ñB\n" +
+                "ï¿½Û‘ï¿½ï¿½tï¿½Hï¿½ï¿½ï¿½_ï¿½ï¿½ï¿½ï¿½ï¿½İ‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½B\n" +
                 PresetDirectory,
                 this
             );
@@ -506,7 +506,7 @@ public class ParameterManager : MonoBehaviour
         if (files.Length == 0)
         {
             Debug.LogWarning(
-                "•Û‘¶‚³‚ê‚½ƒpƒ‰ƒ[ƒ^‚ª‚ ‚è‚Ü‚¹‚ñB\n" +
+                "ï¿½Û‘ï¿½ï¿½ï¿½ï¿½ê‚½ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½B\n" +
                 PresetDirectory,
                 this
             );
@@ -528,7 +528,7 @@ public class ParameterManager : MonoBehaviour
 
 
     // =========================================================
-    // •Û‘¶Œ`®
+    // ï¿½Û‘ï¿½ï¿½`ï¿½ï¿½
     // =========================================================
 
     [Serializable]
@@ -538,7 +538,7 @@ public class ParameterManager : MonoBehaviour
 
         public string savedAt;
 
-        public int shiftPixels;
+        public float shiftPixels;
 
         public float focalLength;
 

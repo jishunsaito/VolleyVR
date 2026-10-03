@@ -64,7 +64,8 @@ public class ImageController : MonoBehaviour
     [Header("Image Shift")]
 
     [Tooltip("左右画像を逆方向にシフトする量[pixel]")]
-    public int shiftPixels = 0;
+    public float shiftPixels =
+        0.0f;
 
 
     // =========================================================
@@ -572,8 +573,15 @@ public class ImageController : MonoBehaviour
         texture.name =
             textureName;
 
+        // -----------------------------------------------------
+        // Fractional-pixel shift対応
+        //
+        // Pointだと小数pixel位置を補間できないため、
+        // Bilinearでサンプリングする。
+        // -----------------------------------------------------
+
         texture.filterMode =
-            source.filterMode;
+            FilterMode.Bilinear;
 
         texture.wrapMode =
             TextureWrapMode.Clamp;
@@ -810,9 +818,18 @@ public class ImageController : MonoBehaviour
         );
     }
 
+
+    // =========================================================
+    // Fractional Pixel Shift
+    //
+    // 修正点：
+    // int shift -> float shift
+    // SetInt()  -> SetFloat()
+    // =========================================================
+
     private void ApplyShiftToMaterial(
         Material material,
-        int shift
+        float shift
     )
     {
         if (material == null)
@@ -820,7 +837,7 @@ public class ImageController : MonoBehaviour
             return;
         }
 
-        material.SetInt(
+        material.SetFloat(
             ShiftPixelsProperty,
             shift
         );
