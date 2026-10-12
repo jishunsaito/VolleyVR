@@ -1,4 +1,6 @@
+using System;
 using System.Collections;
+using System.IO;
 using UnityEngine;
 
 /// <summary>
@@ -25,6 +27,70 @@ using UnityEngine;
 /// </summary>
 public class RallyController : MonoBehaviour
 {
+    // ============================================================
+    // Rally JSON Data
+    // ============================================================
+
+    [Serializable]
+    public class RallySettingsData
+    {
+        public int version = 1;
+
+        public int startPhaseIndex;
+        public int endPhaseIndex;
+        public int courtSideIndex;
+
+        public int serveStartIndex;
+        public int serveTargetIndex;
+
+        public Vector3 serveTargetLeftOffset;
+        public Vector3 serveTargetCenterOffset;
+        public Vector3 serveTargetRightOffset;
+
+        public float receiveApexHeight;
+        public float receiveBackspinRpm;
+        public int receiveContactFixedFrames;
+
+        public int tossSideIndex;
+        public float tossTargetZOffset;
+        public float setApexHeight;
+        public float setSpinRpm;
+        public int setContactFixedFrames;
+
+        public int spikeCourseIndex;
+        public float spikeSpeedKmh;
+        public Vector3 spikeTargetLeftOffset;
+        public Vector3 spikeTargetRightOffset;
+
+        public int blockContactFixedFrames;
+        public float blockExitSpeedKmh;
+        public float blockSpinRpm;
+        public Vector3 blockLandingPointLeftOffset;
+        public Vector3 blockLandingPointRightOffset;
+
+        public float tossHeight;
+        public float serveHitHeight;
+        public float tossForwardDistance;
+        public float serveSpeedKmh;
+        public float spikeServeLaunchAngle;
+
+        public bool enableExperimentFade;
+        public float serveFadeDelay;
+        public float receiveFadeDelay;
+        public float tossFadeDelay;
+        public float spikeFadeDelay;
+        public float blockFadeDelay;
+        public float fadeDuration;
+
+        // DHIT / Static-Base Shift
+        // version 2以降で保存。旧version 1 JSONではfalseのままなので、
+        // Load時に現在のDHIT設定を上書きしない。
+        public bool hasDhitSettings;
+        public float baseShiftPixels;
+        public bool dynamicShiftEnabled;
+        public DhitSettings dhitSettings;
+    }
+
     // ============================================================
     // Play Phase
     // ============================================================
@@ -518,6 +584,20 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
+    // DHIT / Image Shift
+    // ============================================================
+
+    [Header("DHIT / Image Shift")]
+
+    [Tooltip(
+        "Static / Dynamic HITを管理するDHITController。\n" +
+        "Rally JSONではBase Shift、Dynamic ON/OFF、DHITパラメータも保存する。"
+    )]
+    [SerializeField]
+    private DHITController dhitController;
+
+
+    // ============================================================
     // Experiment Fade
     // ============================================================
 
@@ -578,6 +658,23 @@ public class RallyController : MonoBehaviour
     [SerializeField]
     private float fadeDuration =
         0.03f;
+
+
+    // ============================================================
+    // Rally JSON
+    // ============================================================
+
+    [Header("Rally JSON")]
+
+    [Tooltip(
+        "Rally Save / Loadで使用するJSONファイル名。\n" +
+        "BuildではApplication.persistentDataPath内に保存 / 読込する。"
+    )]
+    [SerializeField]
+    private string defaultRallyJsonFileName =
+        "rally_settings.json";
+
+    private string lastRallyJsonDirectory;
 
 
     // ============================================================
@@ -685,6 +782,47 @@ public class RallyController : MonoBehaviour
 
     public float ServeFadeDelay =>
         serveFadeDelay;
+
+    public bool ExperimentFadeEnabled =>
+        enableExperimentFade;
+
+    public bool DynamicShiftEnabled =>
+        dhitController != null &&
+        dhitController.IsDynamic;
+
+    public float BaseShiftPixels =>
+        dhitController != null
+            ? dhitController.BaseShiftPixels
+            : (imageController != null
+                ? imageController.shiftPixels
+                : 0.0f);
+
+    public float ReceiveApexHeight =>
+        receiveApexHeight;
+
+    public float ReceiveBackspinRpm =>
+        receiveBackspinRpm;
+
+    public int ReceiveContactFixedFrames =>
+        receiveContactFixedFrames;
+
+    public float SetSpinRpm =>
+        setSpinRpm;
+
+    public int SetContactFixedFrames =>
+        setContactFixedFrames;
+
+    public int BlockContactFixedFrames =>
+        blockContactFixedFrames;
+
+    public float ReceiveFadeDelay =>
+        receiveFadeDelay;
+
+    public float TossFadeDelay =>
+        tossFadeDelay;
+
+    public float FadeDuration =>
+        fadeDuration;
 
 
     // ============================================================
@@ -900,6 +1038,15 @@ public class RallyController : MonoBehaviour
          */
         ResetExperimentFade();
 
+        /*
+         * 新しいTrial開始時はDHITの時間状態だけを初期化する。
+         * Base ShiftはUI / Inspector / Rally JSONで設定された値を保持する。
+         */
+        if (dhitController != null)
+        {
+            dhitController.BeginTrial();
+        }
+
         switch (startPhase)
         {
             case PlayPhase.Serve:
@@ -962,6 +1109,15 @@ public class RallyController : MonoBehaviour
          * Ball Reset時にはFadeも必ず解除する。
          */
         ResetExperimentFade();
+
+        /*
+         * Reset時はDynamic追加量を0へ戻し、
+         * 表示ShiftをBase Shiftへ戻す。
+         */
+        if (dhitController != null)
+        {
+            dhitController.EndTrial();
+        }
 
         switch (startPhase)
         {
@@ -1759,6 +1915,707 @@ public class RallyController : MonoBehaviour
         Debug.Log(
             "[RallyController] Simulation Finished at Spike."
         );
+    }
+
+
+    // ============================================================
+    // Rally JSON Save / Load
+    // ============================================================
+
+    /// <summary>
+    /// 現在のRallyControllerの設定を1つのデータへまとめる。
+    /// Transformそのものは保存せず、選択状態・数値・Offsetだけを保存する。
+    /// </summary>
+    public RallySettingsData CreateCurrentRallySettings()
+    {
+        DhitSettings dhitSettingsSnapshot =
+            dhitController != null
+                ? dhitController.CreateSettingsSnapshot()
+                : null;
+
+        return new RallySettingsData
+        {
+            version = 2,
+
+            startPhaseIndex =
+                (int)startPhase,
+
+            endPhaseIndex =
+                (int)endPhase,
+
+            courtSideIndex =
+                (int)currentCourtSide,
+
+            serveStartIndex =
+                (int)selectedServeStart,
+
+            serveTargetIndex =
+                (int)selectedServeTarget,
+
+            serveTargetLeftOffset =
+                serveTargetLeftOffset,
+
+            serveTargetCenterOffset =
+                serveTargetCenterOffset,
+
+            serveTargetRightOffset =
+                serveTargetRightOffset,
+
+            receiveApexHeight =
+                receiveApexHeight,
+
+            receiveBackspinRpm =
+                receiveBackspinRpm,
+
+            receiveContactFixedFrames =
+                receiveContactFixedFrames,
+
+            tossSideIndex =
+                (int)selectedTossSide,
+
+            tossTargetZOffset =
+                tossTargetZOffset,
+
+            setApexHeight =
+                setApexHeight,
+
+            setSpinRpm =
+                setSpinRpm,
+
+            setContactFixedFrames =
+                setContactFixedFrames,
+
+            spikeCourseIndex =
+                (int)selectedSpikeCourse,
+
+            spikeSpeedKmh =
+                spikeSpeedKmh,
+
+            spikeTargetLeftOffset =
+                spikeTargetLeftOffset,
+
+            spikeTargetRightOffset =
+                spikeTargetRightOffset,
+
+            blockContactFixedFrames =
+                blockContactFixedFrames,
+
+            blockExitSpeedKmh =
+                blockExitSpeedKmh,
+
+            blockSpinRpm =
+                blockSpinRpm,
+
+            blockLandingPointLeftOffset =
+                blockLandingPointLeftOffset,
+
+            blockLandingPointRightOffset =
+                blockLandingPointRightOffset,
+
+            tossHeight =
+                tossHeight,
+
+            serveHitHeight =
+                serveHitHeight,
+
+            tossForwardDistance =
+                tossForwardDistance,
+
+            serveSpeedKmh =
+                serveSpeedKmh,
+
+            spikeServeLaunchAngle =
+                spikeServeLaunchAngle,
+
+            enableExperimentFade =
+                enableExperimentFade,
+
+            serveFadeDelay =
+                serveFadeDelay,
+
+            receiveFadeDelay =
+                receiveFadeDelay,
+
+            tossFadeDelay =
+                tossFadeDelay,
+
+            spikeFadeDelay =
+                spikeFadeDelay,
+
+            blockFadeDelay =
+                blockFadeDelay,
+
+            fadeDuration =
+                fadeDuration,
+
+            hasDhitSettings =
+                dhitController != null,
+
+            baseShiftPixels =
+                BaseShiftPixels,
+
+            dynamicShiftEnabled =
+                dhitController != null &&
+                dhitController.IsDynamic,
+
+            dhitSettings =
+                dhitSettingsSnapshot
+        };
+    }
+
+
+    /// <summary>
+    /// JSONから読み込んだ設定をRallyControllerへ一括反映する。
+    /// 最後にStart Phaseの位置へBallをResetするので、
+    /// そのままStartSelectedSimulation()を呼べば同じRallyを再生できる。
+    /// </summary>
+    public void ApplyRallySettings(
+        RallySettingsData data,
+        bool resetSimulation = true
+    )
+    {
+        if (data == null)
+        {
+            Debug.LogError(
+                "[RallyController] RallySettingsDataがnullです。"
+            );
+
+            return;
+        }
+
+        startPhase =
+            (PlayPhase)Mathf.Clamp(
+                data.startPhaseIndex,
+                0,
+                4
+            );
+
+        endPhase =
+            (PlayPhase)Mathf.Clamp(
+                data.endPhaseIndex,
+                0,
+                4
+            );
+
+        currentCourtSide =
+            (CourtSide)Mathf.Clamp(
+                data.courtSideIndex,
+                0,
+                1
+            );
+
+        selectedServeStart =
+            (ServeStartPosition)Mathf.Clamp(
+                data.serveStartIndex,
+                0,
+                2
+            );
+
+        selectedServeTarget =
+            (ServeTargetPosition)Mathf.Clamp(
+                data.serveTargetIndex,
+                0,
+                2
+            );
+
+        serveTargetLeftOffset =
+            data.serveTargetLeftOffset;
+
+        serveTargetCenterOffset =
+            data.serveTargetCenterOffset;
+
+        serveTargetRightOffset =
+            data.serveTargetRightOffset;
+
+        receiveApexHeight =
+            data.receiveApexHeight;
+
+        receiveBackspinRpm =
+            data.receiveBackspinRpm;
+
+        receiveContactFixedFrames =
+            Mathf.Max(
+                0,
+                data.receiveContactFixedFrames
+            );
+
+        selectedTossSide =
+            (TossSide)Mathf.Clamp(
+                data.tossSideIndex,
+                0,
+                1
+            );
+
+        tossTargetZOffset =
+            data.tossTargetZOffset;
+
+        setApexHeight =
+            data.setApexHeight;
+
+        setSpinRpm =
+            data.setSpinRpm;
+
+        setContactFixedFrames =
+            Mathf.Max(
+                0,
+                data.setContactFixedFrames
+            );
+
+        selectedSpikeCourse =
+            (SpikeCourse)Mathf.Clamp(
+                data.spikeCourseIndex,
+                0,
+                1
+            );
+
+        spikeSpeedKmh =
+            Mathf.Max(
+                0.0f,
+                data.spikeSpeedKmh
+            );
+
+        spikeTargetLeftOffset =
+            data.spikeTargetLeftOffset;
+
+        spikeTargetRightOffset =
+            data.spikeTargetRightOffset;
+
+        blockContactFixedFrames =
+            Mathf.Max(
+                0,
+                data.blockContactFixedFrames
+            );
+
+        blockExitSpeedKmh =
+            Mathf.Max(
+                0.1f,
+                data.blockExitSpeedKmh
+            );
+
+        blockSpinRpm =
+            data.blockSpinRpm;
+
+        blockLandingPointLeftOffset =
+            data.blockLandingPointLeftOffset;
+
+        blockLandingPointRightOffset =
+            data.blockLandingPointRightOffset;
+
+        tossHeight =
+            Mathf.Max(
+                0.0f,
+                data.tossHeight
+            );
+
+        serveHitHeight =
+            data.serveHitHeight;
+
+        tossForwardDistance =
+            Mathf.Max(
+                0.0f,
+                data.tossForwardDistance
+            );
+
+        serveSpeedKmh =
+            Mathf.Max(
+                0.0f,
+                data.serveSpeedKmh
+            );
+
+        spikeServeLaunchAngle =
+            data.spikeServeLaunchAngle;
+
+        enableExperimentFade =
+            data.enableExperimentFade;
+
+        serveFadeDelay =
+            Mathf.Max(
+                0.0f,
+                data.serveFadeDelay
+            );
+
+        receiveFadeDelay =
+            Mathf.Max(
+                0.0f,
+                data.receiveFadeDelay
+            );
+
+        tossFadeDelay =
+            Mathf.Max(
+                0.0f,
+                data.tossFadeDelay
+            );
+
+        spikeFadeDelay =
+            Mathf.Max(
+                0.0f,
+                data.spikeFadeDelay
+            );
+
+        blockFadeDelay =
+            Mathf.Max(
+                0.0f,
+                data.blockFadeDelay
+            );
+
+        fadeDuration =
+            Mathf.Max(
+                0.0f,
+                data.fadeDuration
+            );
+
+        /*
+         * version 2以降のRally JSONではDHIT状態も復元する。
+         * version 1 JSONにはhasDhitSettingsが存在しないためfalseとなり、
+         * 現在のShift設定を不用意に0へ上書きしない。
+         */
+        if (data.hasDhitSettings)
+        {
+            if (dhitController != null)
+            {
+                dhitController.ApplySavedState(
+                    data.baseShiftPixels,
+                    data.dynamicShiftEnabled,
+                    data.dhitSettings
+                );
+            }
+            else if (imageController != null)
+            {
+                imageController.shiftPixels =
+                    data.baseShiftPixels;
+
+                Debug.LogWarning(
+                    "[RallyController] DHITControllerが未設定のため、" +
+                    "Base ShiftのみImageControllerへ復元しました。"
+                );
+            }
+        }
+
+        ValidateSimulationRange();
+
+        ApplyCourtSide();
+
+        ApplyAllServeTargetOffsets();
+        ApplyAllSpikeTargetOffsets();
+        ApplyAllBlockLandingPointOffsets();
+
+        ResetExperimentFade();
+
+        if (resetSimulation)
+        {
+            ResetSelectedSimulation();
+        }
+    }
+
+
+    /// <summary>
+    /// 現在のRally設定をJSONへ保存する。
+    /// Editorではファイル選択ダイアログ、BuildではpersistentDataPathを使う。
+    /// </summary>
+    public bool SaveRallyJson()
+    {
+        string path =
+            RequestRallySavePath();
+
+        if (string.IsNullOrWhiteSpace(
+            path
+        ))
+        {
+            return false;
+        }
+
+        return SaveRallyJsonToPath(
+            path
+        );
+    }
+
+
+    /// <summary>
+    /// Rally JSONを読み込み、現在設定へ反映する。
+    /// 読込後はStart Phase位置へBallをResetするが、自動再生はしない。
+    /// UIのStart Buttonを押せば保存時と同じRallyを再生できる。
+    /// </summary>
+    public bool LoadRallyJson()
+    {
+        string path =
+            RequestRallyLoadPath();
+
+        if (string.IsNullOrWhiteSpace(
+            path
+        ))
+        {
+            return false;
+        }
+
+        return LoadRallyJsonFromPath(
+            path,
+            false
+        );
+    }
+
+
+    /// <summary>
+    /// Rally JSONを読み込み、そのまま再生する。
+    /// 必要ならUI Buttonから直接呼べる。
+    /// </summary>
+    public bool LoadRallyJsonAndPlay()
+    {
+        string path =
+            RequestRallyLoadPath();
+
+        if (string.IsNullOrWhiteSpace(
+            path
+        ))
+        {
+            return false;
+        }
+
+        return LoadRallyJsonFromPath(
+            path,
+            true
+        );
+    }
+
+
+    public bool SaveRallyJsonToPath(
+        string path
+    )
+    {
+        if (string.IsNullOrWhiteSpace(
+            path
+        ))
+        {
+            return false;
+        }
+
+        try
+        {
+            RallySettingsData data =
+                CreateCurrentRallySettings();
+
+            string json =
+                JsonUtility.ToJson(
+                    data,
+                    true
+                );
+
+            string directory =
+                Path.GetDirectoryName(
+                    path
+                );
+
+            if (!string.IsNullOrWhiteSpace(
+                directory
+            ))
+            {
+                Directory.CreateDirectory(
+                    directory
+                );
+
+                lastRallyJsonDirectory =
+                    directory;
+            }
+
+            File.WriteAllText(
+                path,
+                json
+            );
+
+            Debug.Log(
+                "[RallyController] Rally Settings Saved\n" +
+                $"Path = {path}\n" +
+                json
+            );
+
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError(
+                "[RallyController] Rally JSON保存に失敗しました。\n" +
+                $"Path = {path}\n" +
+                exception
+            );
+
+            return false;
+        }
+    }
+
+
+    public bool LoadRallyJsonFromPath(
+        string path,
+        bool playAfterLoad = false
+    )
+    {
+        if (string.IsNullOrWhiteSpace(
+            path
+        ))
+        {
+            return false;
+        }
+
+        if (!File.Exists(
+            path
+        ))
+        {
+            Debug.LogError(
+                "[RallyController] Rally JSONファイルが存在しません。\n" +
+                $"Path = {path}"
+            );
+
+            return false;
+        }
+
+        try
+        {
+            string json =
+                File.ReadAllText(
+                    path
+                );
+
+            RallySettingsData data =
+                JsonUtility.FromJson<RallySettingsData>(
+                    json
+                );
+
+            if (data == null)
+            {
+                Debug.LogError(
+                    "[RallyController] Rally JSONを読み込めませんでした。"
+                );
+
+                return false;
+            }
+
+            ApplyRallySettings(
+                data,
+                true
+            );
+
+            string directory =
+                Path.GetDirectoryName(
+                    path
+                );
+
+            if (!string.IsNullOrWhiteSpace(
+                directory
+            ))
+            {
+                lastRallyJsonDirectory =
+                    directory;
+            }
+
+            Debug.Log(
+                "[RallyController] Rally Settings Loaded\n" +
+                $"Path = {path}\n" +
+                $"Start = {startPhase}\n" +
+                $"End = {endPhase}\n" +
+                $"Court = {currentCourtSide}"
+            );
+
+            if (playAfterLoad)
+            {
+                StartSelectedSimulation();
+            }
+
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError(
+                "[RallyController] Rally JSON読込に失敗しました。\n" +
+                $"Path = {path}\n" +
+                exception
+            );
+
+            return false;
+        }
+    }
+
+
+    private string RequestRallySavePath()
+    {
+#if UNITY_EDITOR
+        string initialDirectory =
+            GetRallyInitialDirectory();
+
+        string fileNameWithoutExtension =
+            Path.GetFileNameWithoutExtension(
+                GetDefaultRallyJsonFileName()
+            );
+
+        return UnityEditor.EditorUtility.SaveFilePanel(
+            "Save Rally Settings",
+            initialDirectory,
+            fileNameWithoutExtension,
+            "json"
+        );
+#else
+        return GetDefaultRallyJsonPath();
+#endif
+    }
+
+
+    private string RequestRallyLoadPath()
+    {
+#if UNITY_EDITOR
+        return UnityEditor.EditorUtility.OpenFilePanel(
+            "Load Rally Settings",
+            GetRallyInitialDirectory(),
+            "json"
+        );
+#else
+        return GetDefaultRallyJsonPath();
+#endif
+    }
+
+
+    private string GetRallyInitialDirectory()
+    {
+        if (
+            !string.IsNullOrWhiteSpace(
+                lastRallyJsonDirectory
+            ) &&
+            Directory.Exists(
+                lastRallyJsonDirectory
+            )
+        )
+        {
+            return lastRallyJsonDirectory;
+        }
+
+        return Application.persistentDataPath;
+    }
+
+
+    public string GetDefaultRallyJsonPath()
+    {
+        return Path.Combine(
+            Application.persistentDataPath,
+            GetDefaultRallyJsonFileName()
+        );
+    }
+
+
+    private string GetDefaultRallyJsonFileName()
+    {
+        string fileName =
+            string.IsNullOrWhiteSpace(
+                defaultRallyJsonFileName
+            )
+                ? "rally_settings.json"
+                : defaultRallyJsonFileName.Trim();
+
+        if (!fileName.EndsWith(
+            ".json",
+            StringComparison.OrdinalIgnoreCase
+        ))
+        {
+            fileName +=
+                ".json";
+        }
+
+        return fileName;
     }
 
 

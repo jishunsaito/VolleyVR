@@ -81,7 +81,7 @@ public class BallDisparityCalculator : MonoBehaviour
     private float displayPixelPitchMm = 0.1845236f;
 
     // 今回は固定条件
-    private const float ViewingDistanceMm = 936.0f;
+    private const float ViewingDistanceMm = 1000.0f;
     private const float IpdMm = 63.0f;
 
 

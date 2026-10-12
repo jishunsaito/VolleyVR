@@ -63,9 +63,33 @@ public class ImageController : MonoBehaviour
 
     [Header("Image Shift")]
 
-    [Tooltip("左右画像を逆方向にシフトする量[pixel]")]
-    public float shiftPixels =
-        0.0f;
+    [Tooltip(
+        "最終的に描画へ適用するShift量 [pixel]。\n" +
+        "Static / Dynamicの管理はDHITController側で行い、" +
+        "ImageControllerは最終Shiftを受け取って描画へ反映する。"
+    )]
+    public float shiftPixels = 0.0f;
+
+    /// <summary>
+    /// 現在、実際の描画へ適用されている最終Shift [pixel]。
+    /// 既存コード互換のためshiftPixels自体もpublicのまま残している。
+    /// </summary>
+    public float ShiftPixels =>
+        shiftPixels;
+
+    /// <summary>
+    /// 最終Shiftを設定し、即座にMaterialへ反映する。
+    /// 通常はDHITControllerから呼ぶ。
+    /// </summary>
+    public void SetShiftPixels(
+        float value
+    )
+    {
+        shiftPixels =
+            value;
+
+        ApplyImageShift();
+    }
 
 
     // =========================================================
@@ -573,13 +597,6 @@ public class ImageController : MonoBehaviour
         texture.name =
             textureName;
 
-        // -----------------------------------------------------
-        // Fractional-pixel shift対応
-        //
-        // Pointだと小数pixel位置を補間できないため、
-        // Bilinearでサンプリングする。
-        // -----------------------------------------------------
-
         texture.filterMode =
             FilterMode.Bilinear;
 
@@ -817,15 +834,6 @@ public class ImageController : MonoBehaviour
             -shiftPixels
         );
     }
-
-
-    // =========================================================
-    // Fractional Pixel Shift
-    //
-    // 修正点：
-    // int shift -> float shift
-    // SetInt()  -> SetFloat()
-    // =========================================================
 
     private void ApplyShiftToMaterial(
         Material material,

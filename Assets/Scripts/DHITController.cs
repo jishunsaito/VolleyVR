@@ -1,417 +1,83 @@
+using System;
 using UnityEngine;
+
+[Serializable]
+public class DhitSettings
+{
+    [Tooltip("static or dynamic")]
+    public string mode = "dynamic";
+
+    [Tooltip("d(additional disparity)/dt = gain * d(ball disparity)/dt")]
+    public float gain = 0.30f;
+
+    [Tooltip("Maximum positive additional disparity [px]")]
+    public float maxPositiveAdditionalDisparityPx = 20.0f;
+
+    [Tooltip("Maximum magnitude of negative additional disparity [px]")]
+    public float maxNegativeAdditionalDisparityPx = 20.0f;
+
+    [Tooltip("Maximum velocity of additional disparity [px/s]")]
+    public float maxAdditionalDisparityVelocityPxPerSec = 10.0f;
+
+    [Tooltip("Ignore filtered disparity velocities smaller than this [px/s]")]
+    public float velocityDeadZonePxPerSec = 0.5f;
+
+    [Tooltip("Time constant of the first-order low-pass filter [s]. 0 = no filtering")]
+    public float filterTimeConstantSec = 0.05f;
+}
 
 public class DHITController : MonoBehaviour
 {
-    // =========================================================
-    // References
-    // =========================================================
-
     [Header("References")]
+    [SerializeField] private BallDisparityCalculator ballDisparityCalculator;
+    [SerializeField] private ImageController imageController;
 
-    [SerializeField]
-    private BallDisparityCalculator ballDisparityCalculator;
+    [Header("Default DHIT Settings")]
+    [Tooltip("Used until BeginTrial() supplies trial-specific settings.")]
+    [SerializeField] private DhitSettings settings = new DhitSettings();
 
-    [SerializeField]
-    private ImageController imageController;
-
-
-    // =========================================================
-    // DHIT
-    // =========================================================
-
-    [Header("DHIT")]
-
+    [Header("Base Static HIT")]
     [Tooltip(
-        "OFF = Static HIT\n" +
-        "ON = Dynamic HIT"
+        "Static / Base Shift [px]。\n" +
+        "Static時はこの値がそのままImageControllerへ出力され、" +
+        "Dynamic時はこの値にDynamic Shiftを加算する。\n" +
+        "InspectorまたはUIControllerから変更可能。"
     )]
     [SerializeField]
-    private bool dhitEnabled = false;
-
-
-    // =========================================================
-    // Shift Velocity Limit
-    // =========================================================
-
-    [Header("Shift Velocity Limit")]
+    private float baseShiftPixels = 0.0f;
 
     [Tooltip(
-        "ZDP shiftの最大変化速度 [px/s]\n" +
-        "スパイクなどで急激に変化することを防ぎます。\n" +
-        "0 = 制限なし"
-    )]
-    [Min(0.0f)]
-    [SerializeField]
-    private float maxShiftVelocityPxPerSec =
-        20.0f;
-
-
-    // =========================================================
-    // Static HIT
-    // =========================================================
-
-    [Header("Static HIT")]
-
-    [Tooltip(
-        "DHIT OFF時のStatic shiftPixels。\n" +
-        "Dynamic開始時の初期位置にもなります。"
+        "ONの場合のみ、Awake時にImageController.shiftPixelsを" +
+        "Base Shiftの初期値として取り込む。\n" +
+        "通常はOFFにしてDHITControllerのBase Shiftを正とする。"
     )]
     [SerializeField]
-    private float baseShiftPixels =
-        0.0f;
+    private bool initializeBaseShiftFromImageControllerOnAwake = false;
 
+    private bool disparityInitialized = false;
+    private float previousDisparityPx = 0.0f;
+    private float filteredDisparityVelocityPxPerSec = 0.0f;
+    private float additionalDisparityPx = 0.0f;
 
-    [Tooltip(
-        "BeginTrial()時点のImageController.shiftPixelsを" +
-        "Static HITとして取得します。"
-    )]
-    [SerializeField]
-    private bool captureBaseShiftAtTrialStart =
-        true;
+    public float CurrentBallDisparityPx { get; private set; }
+    public float CurrentRawDisparityVelocityPxPerSec { get; private set; }
+    public float CurrentFilteredDisparityVelocityPxPerSec { get; private set; }
+    public float CurrentDhitVelocityPxPerSec { get; private set; }
+    public float CurrentAdditionalDisparityPx => additionalDisparityPx;
+    public float CurrentDynamicShiftPixels { get; private set; }
+    public float CurrentFinalShiftPixels { get; private set; }
+    public float BaseShiftPixels => baseShiftPixels;
 
-
-    // =========================================================
-    // Target Pole
-    // =========================================================
-
-    private enum TargetPole
-    {
-        None,
-        Near,
-        Far
-    }
-
-
-    private TargetPole currentTargetPole =
-        TargetPole.None;
-
-
-    // =========================================================
-    // Internal State
-    // =========================================================
-
-    private bool depthInitialized =
-        false;
-
-
-    private float previousBallDepthMeters =
-        0.0f;
-
-
-    private float currentShiftPixels =
-        0.0f;
-
-
-    private float targetShiftPixels =
-        0.0f;
-
-
-    // =========================================================
-    // Public Debug Values
-    // =========================================================
-
-    public bool DHITEnabled =>
-        dhitEnabled;
-
-
-    public float BaseShiftPixels =>
-        baseShiftPixels;
-
-
-    public float CurrentShiftPixels =>
-        currentShiftPixels;
-
-
-    public float TargetShiftPixels =>
-        targetShiftPixels;
-
-
-    public float CurrentBallDepthMeters
-    {
-        get;
-        private set;
-    }
-
-
-    /// <summary>
-    /// Camera-space depth velocity [m/s]
-    ///
-    /// negative:
-    /// Cameraへ近づく
-    ///
-    /// positive:
-    /// Cameraから遠ざかる
-    /// </summary>
-    public float CurrentDepthVelocityMps
-    {
-        get;
-        private set;
-    }
-
-
-    /// <summary>
-    /// Near/Far Pole間の
-    /// depth -> shift変換係数 [px/m]
-    /// </summary>
-    public float CurrentShiftPerDepthPxPerMeter
-    {
-        get;
-        private set;
-    }
-
-
-    /// <summary>
-    /// 上限制限前の自然なZDP追従速度 [px/s]
-    /// </summary>
-    public float CurrentNaturalShiftVelocityPxPerSec
-    {
-        get;
-        private set;
-    }
-
-
-    /// <summary>
-    /// 実際に使用しているZDP追従速度 [px/s]
-    /// </summary>
-    public float CurrentAppliedShiftVelocityPxPerSec
-    {
-        get;
-        private set;
-    }
-
-
-    public string CurrentTargetPole =>
-        currentTargetPole.ToString();
-
-
-    // =========================================================
-    // Pole Target Shifts
-    // =========================================================
-
-    public float NearPoleTargetShiftPixels
-    {
-        get
-        {
-            if (
-                ballDisparityCalculator == null ||
-                !ballDisparityCalculator.HasNearPole
-            )
-            {
-                return 0.0f;
-            }
-
-
-            /*
-             * shiftedDisparity
-             * =
-             * rawDisparity
-             * -
-             * 2 * shiftPixels
-             *
-             * ZDPでは
-             *
-             * shiftedDisparity = 0
-             *
-             * よって
-             *
-             * shiftPixels
-             * =
-             * rawDisparity / 2
-             */
-
-            return
-                ballDisparityCalculator
-                    .NearPoleDisparityPixels *
-                0.5f;
-        }
-    }
-
-
-    public float FarPoleTargetShiftPixels
-    {
-        get
-        {
-            if (
-                ballDisparityCalculator == null ||
-                !ballDisparityCalculator.HasFarPole
-            )
-            {
-                return 0.0f;
-            }
-
-
-            return
-                ballDisparityCalculator
-                    .FarPoleDisparityPixels *
-                0.5f;
-        }
-    }
-
-
-    // =========================================================
-    // Unity
-    // =========================================================
+    public bool IsDynamic =>
+        settings != null &&
+        string.Equals(settings.mode, "dynamic", StringComparison.OrdinalIgnoreCase);
 
     private void Awake()
     {
-        if (imageController != null)
-        {
-            baseShiftPixels =
-                imageController.shiftPixels;
-        }
-
-
-        ResetInternalState();
-
-
-        currentShiftPixels =
-            baseShiftPixels;
-
-
-        targetShiftPixels =
-            baseShiftPixels;
-
-
-        ApplyCurrentShift();
-    }
-
-
-    /// <summary>
-    /// BallDisparityCalculatorはUpdate()で計算するので、
-    /// DHITControllerはLateUpdate()で結果を使用する。
-    /// </summary>
-    private void LateUpdate()
-    {
-        if (
-            imageController == null ||
-            ballDisparityCalculator == null
-        )
-        {
-            return;
-        }
-
-
-        // =====================================================
-        // Static condition
-        // =====================================================
-
-        if (!dhitEnabled)
-        {
-            currentShiftPixels =
-                baseShiftPixels;
-
-
-            targetShiftPixels =
-                baseShiftPixels;
-
-
-            currentTargetPole =
-                TargetPole.None;
-
-
-            depthInitialized =
-                false;
-
-
-            CurrentDepthVelocityMps =
-                0.0f;
-
-
-            CurrentShiftPerDepthPxPerMeter =
-                0.0f;
-
-
-            CurrentNaturalShiftVelocityPxPerSec =
-                0.0f;
-
-
-            CurrentAppliedShiftVelocityPxPerSec =
-                0.0f;
-
-
-            ApplyCurrentShift();
-
-            return;
-        }
-
-
-        // =====================================================
-        // Dynamic condition
-        // =====================================================
-
-        float dt =
-            Time.deltaTime;
-
-
-        if (dt <= 0.0f)
-        {
-            return;
-        }
-
-
-        // 1.
-        // BallのCamera-space depth velocityを求める
-        UpdateBallDepthVelocity(
-            dt
-        );
-
-
-        // 2.
-        // Velocityの符号からNear/Far Poleを決める
-        UpdateTargetPole();
-
-
-        // 3.
-        // Target PoleをZDPにするshiftを求める
-        UpdateTargetShift();
-
-
-        // 4.
-        // Near/Far Pole geometryから
-        // depth velocity -> shift velocityへ変換
-        UpdateTrackingVelocity();
-
-
-        // 5.
-        // Targetへ追従
-        TrackTarget(
-            dt
-        );
-
-
-        // 6.
-        // ImageControllerへ反映
-        ApplyCurrentShift();
-    }
-
-
-    // =========================================================
-    // Trial Control
-    // =========================================================
-
-    /// <summary>
-    /// false = Static
-    /// true  = Dynamic
-    ///
-    /// 推奨：
-    ///
-    /// 1.
-    /// ImageController.shiftPixelsに
-    /// Static ZDPを設定
-    ///
-    /// 2.
-    /// BeginTrial()
-    /// </summary>
-    public void BeginTrial(
-        bool dynamicCondition
-    )
-    {
-        dhitEnabled =
-            dynamicCondition;
-
+        EnsureSettings();
 
         if (
-            captureBaseShiftAtTrialStart &&
+            initializeBaseShiftFromImageControllerOnAwake &&
             imageController != null
         )
         {
@@ -419,680 +85,366 @@ public class DHITController : MonoBehaviour
                 imageController.shiftPixels;
         }
 
-
         ResetInternalState();
-
-
-        currentShiftPixels =
-            baseShiftPixels;
-
-
-        targetShiftPixels =
-            baseShiftPixels;
-
-
-        ApplyCurrentShift();
+        ApplyFinalShift();
     }
 
+    private void LateUpdate()
+    {
+        if (settings == null || imageController == null)
+            return;
+
+        if (!IsDynamic)
+        {
+            additionalDisparityPx = 0.0f;
+
+            CurrentRawDisparityVelocityPxPerSec = 0.0f;
+            CurrentFilteredDisparityVelocityPxPerSec = 0.0f;
+            CurrentDhitVelocityPxPerSec = 0.0f;
+
+            disparityInitialized = false;
+
+            ApplyFinalShift();
+            return;
+        }
+
+        float dt = Time.deltaTime;
+
+        if (dt <= 0.0f)
+            return;
+
+        StepDHIT(dt);
+        ApplyFinalShift();
+    }
+
+    public void BeginTrial()
+    {
+        BeginTrial(
+            null
+        );
+    }
+
+    public void BeginTrial(DhitSettings newSettings)
+    {
+        if (newSettings != null)
+        {
+            settings =
+                CopySettings(
+                    newSettings
+                );
+        }
+
+        EnsureSettings();
+
+        /*
+         * Base ShiftはUIまたはDHITController Inspectorの値を正とする。
+         * ImageController.shiftPixelsはFinal Shiftなので、
+         * Trial開始時にここからBaseへ逆コピーしない。
+         */
+        ResetInternalState();
+        ApplyFinalShift();
+    }
 
     public void EndTrial()
     {
         ResetInternalState();
-
-
-        currentShiftPixels =
-            baseShiftPixels;
-
-
-        targetShiftPixels =
-            baseShiftPixels;
-
-
-        ApplyCurrentShift();
+        ApplyFinalShift();
     }
 
-
-    // =========================================================
-    // Enable / Disable
-    // =========================================================
-
-    public void SetDHITEnabled(
-        bool enabled
-    )
-    {
-        dhitEnabled =
-            enabled;
-
-
-        ResetInternalState();
-
-
-        currentShiftPixels =
-            baseShiftPixels;
-
-
-        targetShiftPixels =
-            baseShiftPixels;
-
-
-        ApplyCurrentShift();
-    }
-
-
-    // =========================================================
-    // Base Shift
-    // =========================================================
-
-    public void SetBaseShiftPixels(
-        float shiftPixels
-    )
+    public void SetBaseShiftPixels(float shiftPixels)
     {
         baseShiftPixels =
             shiftPixels;
 
-
-        if (!dhitEnabled)
-        {
-            currentShiftPixels =
-                baseShiftPixels;
-
-
-            targetShiftPixels =
-                baseShiftPixels;
-
-
-            ApplyCurrentShift();
-        }
+        ApplyFinalShift();
     }
-
 
     public void CaptureCurrentShiftAsBase()
     {
         if (imageController == null)
-        {
             return;
-        }
 
-
-        baseShiftPixels =
-            imageController.shiftPixels;
-
-
-        if (!dhitEnabled)
-        {
-            currentShiftPixels =
-                baseShiftPixels;
-
-
-            targetShiftPixels =
-                baseShiftPixels;
-        }
+        baseShiftPixels = imageController.shiftPixels;
+        ApplyFinalShift();
     }
 
+    public void SetDynamicEnabled(bool enabled)
+    {
+        EnsureSettings();
 
-    // =========================================================
-    // 1. Ball Depth Velocity
-    // =========================================================
+        settings.mode =
+            enabled
+                ? "dynamic"
+                : "static";
 
-    private void UpdateBallDepthVelocity(
-        float dt
+        ResetInternalState();
+        ApplyFinalShift();
+    }
+
+    /// <summary>
+    /// 現在のDHIT設定をJSON保存用にコピーして返す。
+    /// 参照をそのまま返さないため、保存側で値を変更してもRuntime設定に影響しない。
+    /// </summary>
+    public DhitSettings CreateSettingsSnapshot()
+    {
+        EnsureSettings();
+
+        return CopySettings(
+            settings
+        );
+    }
+
+    /// <summary>
+    /// Rally JSONなどからDHIT状態を完全復元する。
+    /// </summary>
+    public void ApplySavedState(
+        float savedBaseShiftPixels,
+        bool dynamicEnabled,
+        DhitSettings savedSettings
     )
     {
-        if (
-            !ballDisparityCalculator
-                .HasBall
-        )
+        if (savedSettings != null)
         {
-            depthInitialized =
-                false;
-
-
-            CurrentDepthVelocityMps =
-                0.0f;
-
-
-            return;
-        }
-
-
-        float currentDepth =
-            ballDisparityCalculator
-                .DepthMeters;
-
-
-        CurrentBallDepthMeters =
-            currentDepth;
-
-
-        // =====================================================
-        // First valid frame
-        // =====================================================
-
-        if (!depthInitialized)
-        {
-            previousBallDepthMeters =
-                currentDepth;
-
-
-            CurrentDepthVelocityMps =
-                0.0f;
-
-
-            depthInitialized =
-                true;
-
-
-            return;
-        }
-
-
-        // =====================================================
-        // Camera-space depth velocity
-        //
-        //
-        // Vz =
-        //
-        // Z(t) - Z(t-dt)
-        // ----------------
-        //       dt
-        //
-        //
-        // Vz < 0
-        //
-        // Cameraへ近づく
-        //
-        //
-        // Vz > 0
-        //
-        // Cameraから遠ざかる
-        // =====================================================
-
-        CurrentDepthVelocityMps =
-            (
-                currentDepth -
-                previousBallDepthMeters
-            )
-            /
-            dt;
-
-
-        previousBallDepthMeters =
-            currentDepth;
-    }
-
-
-    // =========================================================
-    // 2. Direction -> Target Pole
-    // =========================================================
-
-    private void UpdateTargetPole()
-    {
-        if (!depthInitialized)
-        {
-            return;
-        }
-
-
-        /*
-         * 調整用Dead Zoneではなく、
-         * 浮動小数点誤差対策だけ。
-         */
-        const float NumericalEpsilon =
-            0.00001f;
-
-
-        float velocity =
-            CurrentDepthVelocityMps;
-
-
-        // =====================================================
-        // Cameraへ近づく
-        //
-        // -> Far Poleを目標
-        // =====================================================
-
-        if (
-            velocity <
-            -NumericalEpsilon
-        )
-        {
-            if (
-                ballDisparityCalculator
-                    .HasFarPole
-            )
-            {
-                currentTargetPole =
-                    TargetPole.Far;
-            }
-
-
-            return;
-        }
-
-
-        // =====================================================
-        // Cameraから遠ざかる
-        //
-        // -> Near Poleを目標
-        // =====================================================
-
-        if (
-            velocity >
-            NumericalEpsilon
-        )
-        {
-            if (
-                ballDisparityCalculator
-                    .HasNearPole
-            )
-            {
-                currentTargetPole =
-                    TargetPole.Near;
-            }
-
-
-            return;
-        }
-
-
-        // =====================================================
-        // Velocity ≈ 0
-        //
-        // Targetは変更しない。
-        //
-        // トス頂点などでBaseへ戻したり、
-        // Near/Farを切り替えたりしない。
-        // =====================================================
-    }
-
-
-    // =========================================================
-    // 3. Target Pole -> Target Shift
-    // =========================================================
-
-    private void UpdateTargetShift()
-    {
-        switch (currentTargetPole)
-        {
-            // =================================================
-            // Near Pole
-            // =================================================
-
-            case TargetPole.Near:
-
-                if (
-                    ballDisparityCalculator
-                        .HasNearPole
-                )
-                {
-                    targetShiftPixels =
-                        NearPoleTargetShiftPixels;
-                }
-
-                break;
-
-
-            // =================================================
-            // Far Pole
-            // =================================================
-
-            case TargetPole.Far:
-
-                if (
-                    ballDisparityCalculator
-                        .HasFarPole
-                )
-                {
-                    targetShiftPixels =
-                        FarPoleTargetShiftPixels;
-                }
-
-                break;
-
-
-            // =================================================
-            // No direction yet
-            //
-            // 試行開始直後はStatic位置
-            // =================================================
-
-            case TargetPole.None:
-
-            default:
-
-                targetShiftPixels =
-                    baseShiftPixels;
-
-                break;
-        }
-    }
-
-
-    // =========================================================
-    // 4. Depth Velocity -> Shift Velocity
-    // =========================================================
-
-    private void UpdateTrackingVelocity()
-    {
-        // Pole情報が取れなければ追従しない
-        if (
-            !ballDisparityCalculator.HasNearPole ||
-            !ballDisparityCalculator.HasFarPole
-        )
-        {
-            CurrentShiftPerDepthPxPerMeter =
-                0.0f;
-
-
-            CurrentNaturalShiftVelocityPxPerSec =
-                0.0f;
-
-
-            CurrentAppliedShiftVelocityPxPerSec =
-                0.0f;
-
-
-            return;
-        }
-
-
-        // =====================================================
-        // Near / Far Pole depth [m]
-        // =====================================================
-
-        float nearDepth =
-            ballDisparityCalculator
-                .NearPoleDepthMeters;
-
-
-        float farDepth =
-            ballDisparityCalculator
-                .FarPoleDepthMeters;
-
-
-        // =====================================================
-        // Near / Far Pole ZDP shift [px]
-        // =====================================================
-
-        float nearShift =
-            NearPoleTargetShiftPixels;
-
-
-        float farShift =
-            FarPoleTargetShiftPixels;
-
-
-        // =====================================================
-        // Pole間のDepth距離
-        // =====================================================
-
-        float depthDifference =
-            Mathf.Abs(
-                farDepth -
-                nearDepth
-            );
-
-
-        // =====================================================
-        // Pole間のShift距離
-        // =====================================================
-
-        float shiftDifference =
-            Mathf.Abs(
-                farShift -
-                nearShift
-            );
-
-
-        // 同一depthなど異常条件
-        if (
-            depthDifference <=
-            0.000001f
-        )
-        {
-            CurrentShiftPerDepthPxPerMeter =
-                0.0f;
-
-
-            CurrentNaturalShiftVelocityPxPerSec =
-                0.0f;
-
-
-            CurrentAppliedShiftVelocityPxPerSec =
-                0.0f;
-
-
-            return;
-        }
-
-
-        // =====================================================
-        // Geometry-derived conversion
-        //
-        //
-        // K =
-        //
-        // Pole間Shift [px]
-        // -----------------
-        // Pole間Depth [m]
-        //
-        //
-        // [px/m]
-        //
-        //
-        // 調整用gainではなく、
-        // 現在の撮影条件とPole geometryから
-        // 自動的に決まる。
-        // =====================================================
-
-        float shiftPerDepth =
-            shiftDifference /
-            depthDifference;
-
-
-        CurrentShiftPerDepthPxPerMeter =
-            shiftPerDepth;
-
-
-        // =====================================================
-        // Natural shift velocity
-        //
-        //
-        // Vshift =
-        //
-        // K * |Vz|
-        //
-        //
-        // [px/m] * [m/s]
-        //
-        // =
-        //
-        // [px/s]
-        // =====================================================
-
-        float naturalShiftVelocity =
-            shiftPerDepth *
-            Mathf.Abs(
-                CurrentDepthVelocityMps
-            );
-
-
-        CurrentNaturalShiftVelocityPxPerSec =
-            naturalShiftVelocity;
-
-
-        // =====================================================
-        // Maximum velocity limit
-        //
-        // 0 = unlimited
-        // =====================================================
-
-        if (
-            maxShiftVelocityPxPerSec >
-            0.0f
-        )
-        {
-            CurrentAppliedShiftVelocityPxPerSec =
-                Mathf.Min(
-                    naturalShiftVelocity,
-                    maxShiftVelocityPxPerSec
+            settings =
+                CopySettings(
+                    savedSettings
                 );
         }
         else
         {
-            CurrentAppliedShiftVelocityPxPerSec =
-                naturalShiftVelocity;
+            EnsureSettings();
         }
+
+        settings.mode =
+            dynamicEnabled
+                ? "dynamic"
+                : "static";
+
+        baseShiftPixels =
+            savedBaseShiftPixels;
+
+        ResetInternalState();
+        ApplyFinalShift();
     }
 
-
-    // =========================================================
-    // 5. Target Tracking
-    // =========================================================
-
-    private void TrackTarget(
-        float dt
-    )
-    {
-        // まだ進行方向が決まっていない
-        if (
-            currentTargetPole ==
-            TargetPole.None
-        )
-        {
-            return;
-        }
-
-
-        float shiftVelocity =
-            CurrentAppliedShiftVelocityPxPerSec;
-
-
-        if (
-            shiftVelocity <=
-            0.0f
-        )
-        {
-            return;
-        }
-
-
-        // =====================================================
-        // TargetはNear/Far Poleそのもの。
-        //
-        // ただしActual shiftは
-        // 奥行き速度に応じた速度でそこへ向かう。
-        //
-        //
-        // S(t + dt)
-        //
-        // =
-        //
-        // MoveTowards(
-        //     S(t),
-        //     Starget,
-        //     Vshift * dt
-        // )
-        //
-        // =====================================================
-
-        currentShiftPixels =
-            Mathf.MoveTowards(
-                currentShiftPixels,
-                targetShiftPixels,
-                shiftVelocity * dt
-            );
-    }
-
-
-    // =========================================================
-    // Apply
-    // =========================================================
-
-    private void ApplyCurrentShift()
-    {
-        if (imageController == null)
-        {
-            return;
-        }
-
-
-        imageController.shiftPixels =
-            currentShiftPixels;
-    }
-
-
-    // =========================================================
-    // Trajectory Discontinuity
-    // =========================================================
-
-    /// <summary>
-    /// ボール位置がTeleportした場合のみ呼ぶ。
-    ///
-    /// Toss -> Spikeで位置が連続しているなら
-    /// 呼ばない。
-    ///
-    /// Current ShiftとTarget Poleは維持し、
-    /// 速度計算だけリセットする。
-    /// </summary>
     public void NotifyTrajectoryDiscontinuity()
     {
-        depthInitialized =
-            false;
+        disparityInitialized = false;
+        previousDisparityPx = 0.0f;
+        filteredDisparityVelocityPxPerSec = 0.0f;
 
-
-        previousBallDepthMeters =
-            0.0f;
-
-
-        CurrentDepthVelocityMps =
-            0.0f;
-
-
-        CurrentNaturalShiftVelocityPxPerSec =
-            0.0f;
-
-
-        CurrentAppliedShiftVelocityPxPerSec =
-            0.0f;
+        CurrentRawDisparityVelocityPxPerSec = 0.0f;
+        CurrentFilteredDisparityVelocityPxPerSec = 0.0f;
+        CurrentDhitVelocityPxPerSec = 0.0f;
     }
 
+    private void StepDHIT(float dt)
+    {
+        if (!TryGetRawBallDisparityPx(out float disparityPx))
+        {
+            disparityInitialized = false;
 
-    // =========================================================
-    // Reset
-    // =========================================================
+            CurrentRawDisparityVelocityPxPerSec = 0.0f;
+            CurrentFilteredDisparityVelocityPxPerSec = 0.0f;
+            CurrentDhitVelocityPxPerSec = 0.0f;
+
+            return;
+        }
+
+        CurrentBallDisparityPx = disparityPx;
+
+        if (!disparityInitialized)
+        {
+            previousDisparityPx = disparityPx;
+            filteredDisparityVelocityPxPerSec = 0.0f;
+            disparityInitialized = true;
+
+            CurrentRawDisparityVelocityPxPerSec = 0.0f;
+            CurrentFilteredDisparityVelocityPxPerSec = 0.0f;
+            CurrentDhitVelocityPxPerSec = 0.0f;
+
+            return;
+        }
+
+        float rawDisparityVelocity =
+            (disparityPx - previousDisparityPx) / dt;
+
+        previousDisparityPx = disparityPx;
+        CurrentRawDisparityVelocityPxPerSec = rawDisparityVelocity;
+
+        float tau = Mathf.Max(0.0f, settings.filterTimeConstantSec);
+
+        if (tau <= 0.0f)
+        {
+            filteredDisparityVelocityPxPerSec = rawDisparityVelocity;
+        }
+        else
+        {
+            float alpha = 1.0f - Mathf.Exp(-dt / tau);
+
+            filteredDisparityVelocityPxPerSec =
+                Mathf.Lerp(
+                    filteredDisparityVelocityPxPerSec,
+                    rawDisparityVelocity,
+                    alpha
+                );
+        }
+
+        CurrentFilteredDisparityVelocityPxPerSec =
+            filteredDisparityVelocityPxPerSec;
+
+        float velocityForControl =
+            filteredDisparityVelocityPxPerSec;
+
+        float deadZone =
+            Mathf.Max(0.0f, settings.velocityDeadZonePxPerSec);
+
+        if (Mathf.Abs(velocityForControl) < deadZone)
+            velocityForControl = 0.0f;
+
+        float commandedDhitVelocity =
+            settings.gain * velocityForControl;
+
+        float maxVelocity =
+            Mathf.Max(
+                0.0f,
+                settings.maxAdditionalDisparityVelocityPxPerSec
+            );
+
+        commandedDhitVelocity =
+            Mathf.Clamp(
+                commandedDhitVelocity,
+                -maxVelocity,
+                +maxVelocity
+            );
+
+        float before = additionalDisparityPx;
+
+        additionalDisparityPx +=
+            commandedDhitVelocity * dt;
+
+        float maxPositive =
+            Mathf.Max(
+                0.0f,
+                settings.maxPositiveAdditionalDisparityPx
+            );
+
+        float maxNegative =
+            Mathf.Max(
+                0.0f,
+                settings.maxNegativeAdditionalDisparityPx
+            );
+
+        additionalDisparityPx =
+            Mathf.Clamp(
+                additionalDisparityPx,
+                -maxNegative,
+                +maxPositive
+            );
+
+        CurrentDhitVelocityPxPerSec =
+            (additionalDisparityPx - before) / dt;
+    }
+
+    private bool TryGetRawBallDisparityPx(out float disparityPx)
+    {
+        disparityPx = 0.0f;
+
+        if (ballDisparityCalculator == null)
+            return false;
+
+        if (!ballDisparityCalculator.HasBall)
+            return false;
+
+        // IMPORTANT:
+        // Use the raw disparity, not ShiftedDisparityPixels.
+        // Otherwise the controller's own output feeds back into its input.
+        disparityPx = ballDisparityCalculator.DisparityPixels;
+
+        if (float.IsNaN(disparityPx) ||
+            float.IsInfinity(disparityPx))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ApplyFinalShift()
+    {
+        if (imageController == null)
+            return;
+
+        // BallDisparityCalculator uses:
+        // shiftedDisparity = rawDisparity - 2 * shiftPixels
+        //
+        // Therefore, adding +A [px] disparity requires:
+        // deltaShiftPixels = -A / 2
+        CurrentDynamicShiftPixels =
+            -0.5f * additionalDisparityPx;
+
+        CurrentFinalShiftPixels =
+            baseShiftPixels + CurrentDynamicShiftPixels;
+
+        imageController.shiftPixels =
+            CurrentFinalShiftPixels;
+    }
+
+    private void EnsureSettings()
+    {
+        if (settings == null)
+        {
+            settings =
+                new DhitSettings();
+        }
+    }
+
+    private static DhitSettings CopySettings(
+        DhitSettings source
+    )
+    {
+        if (source == null)
+        {
+            return new DhitSettings();
+        }
+
+        return new DhitSettings
+        {
+            mode =
+                source.mode,
+
+            gain =
+                source.gain,
+
+            maxPositiveAdditionalDisparityPx =
+                source.maxPositiveAdditionalDisparityPx,
+
+            maxNegativeAdditionalDisparityPx =
+                source.maxNegativeAdditionalDisparityPx,
+
+            maxAdditionalDisparityVelocityPxPerSec =
+                source.maxAdditionalDisparityVelocityPxPerSec,
+
+            velocityDeadZonePxPerSec =
+                source.velocityDeadZonePxPerSec,
+
+            filterTimeConstantSec =
+                source.filterTimeConstantSec
+        };
+    }
 
     private void ResetInternalState()
     {
-        depthInitialized =
-            false;
+        disparityInitialized = false;
+        previousDisparityPx = 0.0f;
+        filteredDisparityVelocityPxPerSec = 0.0f;
+        additionalDisparityPx = 0.0f;
 
-
-        previousBallDepthMeters =
-            0.0f;
-
-
-        currentTargetPole =
-            TargetPole.None;
-
-
-        CurrentBallDepthMeters =
-            0.0f;
-
-
-        CurrentDepthVelocityMps =
-            0.0f;
-
-
-        CurrentShiftPerDepthPxPerMeter =
-            0.0f;
-
-
-        CurrentNaturalShiftVelocityPxPerSec =
-            0.0f;
-
-
-        CurrentAppliedShiftVelocityPxPerSec =
-            0.0f;
+        CurrentBallDisparityPx = 0.0f;
+        CurrentRawDisparityVelocityPxPerSec = 0.0f;
+        CurrentFilteredDisparityVelocityPxPerSec = 0.0f;
+        CurrentDhitVelocityPxPerSec = 0.0f;
+        CurrentDynamicShiftPixels = 0.0f;
+        CurrentFinalShiftPixels = baseShiftPixels;
     }
 }

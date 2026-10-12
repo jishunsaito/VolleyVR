@@ -19,6 +19,10 @@ public class UIController : MonoBehaviour
     [SerializeField]
     private RallyController rallyController;
 
+    [Tooltip("Static / Dynamic HITを管理するDHITController")]
+    [SerializeField]
+    private DHITController dhitController;
+
 
     // =========================================================
     // Play Selection / Start
@@ -48,6 +52,26 @@ public class UIController : MonoBehaviour
     [Tooltip("実験用FadeのON / OFFを切り替えるToggle")]
     [SerializeField]
     private Toggle experimentFadeToggle;
+
+
+    // =========================================================
+    // Rally Save / Load
+    // =========================================================
+
+    [Header("Rally Save / Load")]
+
+    [Tooltip("現在のRallyController設定をJSONへ保存するButton")]
+    [SerializeField]
+    private Button rallySaveButton;
+
+    [Tooltip("Rally JSONを読み込み、RallyController設定を復元するButton")]
+    [SerializeField]
+    private Button rallyLoadButton;
+
+    [Tooltip("ONならRally Load直後に、そのRallyを自動再生する")]
+    [SerializeField]
+    private bool playImmediatelyAfterRallyLoad =
+        true;
 
 
     // =========================================================
@@ -86,11 +110,17 @@ public class UIController : MonoBehaviour
 
     [Header("Shift UI")]
 
+    [Tooltip("Static / Base Shift [px]。Dynamic時もこの値を基準にする。")]
     [SerializeField]
     private Slider shiftSlider;
 
+    [Tooltip("Static / Base Shift [px]。小数値も入力可能。")]
     [SerializeField]
     private TMP_InputField shiftInputField;
+
+    [Tooltip("ON = Dynamic HIT、OFF = Static HIT")]
+    [SerializeField]
+    private Toggle dynamicShiftToggle;
 
 
     // =========================================================
@@ -267,6 +297,8 @@ public class UIController : MonoBehaviour
         }
 
 
+        BindDynamicShiftToggle();
+
         BindShift();
 
         BindFocalLength();
@@ -292,6 +324,8 @@ public class UIController : MonoBehaviour
         BindStartButton();
 
         BindExperimentFadeToggle();
+
+        BindRallySaveLoadButtons();
 
 
         UpdateOutputText();
@@ -344,6 +378,27 @@ public class UIController : MonoBehaviour
         {
             experimentFadeToggle.onValueChanged.RemoveListener(
                 OnExperimentFadeToggleChanged
+            );
+        }
+
+        if (dynamicShiftToggle != null)
+        {
+            dynamicShiftToggle.onValueChanged.RemoveListener(
+                OnDynamicShiftToggleChanged
+            );
+        }
+
+        if (rallySaveButton != null)
+        {
+            rallySaveButton.onClick.RemoveListener(
+                OnRallySaveButtonClicked
+            );
+        }
+
+        if (rallyLoadButton != null)
+        {
+            rallyLoadButton.onClick.RemoveListener(
+                OnRallyLoadButtonClicked
             );
         }
     }
@@ -572,14 +627,11 @@ public class UIController : MonoBehaviour
         }
 
         /*
-         * ToggleのInspector上の初期値を
-         * RallyControllerのFade ON / OFFへ反映する。
-         *
-         * ON  : End Phase開始後、各PhaseのFade Delayに従ってFadeする。
-         * OFF : Fade Timerを無効化し、RallyController側でFade状態もResetされる。
+         * RallyControllerを正としてToggle表示を合わせる。
+         * Rally JSON Load後も同じ方法で同期する。
          */
-        rallyController.SetExperimentFadeEnabled(
-            experimentFadeToggle.isOn
+        experimentFadeToggle.SetIsOnWithoutNotify(
+            rallyController.ExperimentFadeEnabled
         );
 
         experimentFadeToggle.onValueChanged.AddListener(
@@ -604,6 +656,189 @@ public class UIController : MonoBehaviour
 
 
     // =========================================================
+    // Rally Save / Load
+    // =========================================================
+
+    private void BindRallySaveLoadButtons()
+    {
+        if (rallyController == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにRallyControllerが設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        if (rallySaveButton != null)
+        {
+            rallySaveButton.onClick.AddListener(
+                OnRallySaveButtonClicked
+            );
+        }
+        else
+        {
+            Debug.LogWarning(
+                "UIControllerにRally Save Buttonが設定されていません。",
+                this
+            );
+        }
+
+        if (rallyLoadButton != null)
+        {
+            rallyLoadButton.onClick.AddListener(
+                OnRallyLoadButtonClicked
+            );
+        }
+        else
+        {
+            Debug.LogWarning(
+                "UIControllerにRally Load Buttonが設定されていません。",
+                this
+            );
+        }
+    }
+
+
+    private void OnRallySaveButtonClicked()
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        rallyController.SaveRallyJson();
+    }
+
+
+    private void OnRallyLoadButtonClicked()
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        bool loaded =
+            playImmediatelyAfterRallyLoad
+                ? rallyController.LoadRallyJsonAndPlay()
+                : rallyController.LoadRallyJson();
+
+        if (!loaded)
+        {
+            return;
+        }
+
+        /*
+         * Rally JSONにはStart / End / Fadeだけでなく、
+         * DHITのStatic Base Shift / Dynamic ON-OFFも含まれる。
+         * Load後はUI全体をControllerの値へ同期する。
+         */
+        RefreshFromController();
+    }
+
+
+    private void RefreshRallyControlsFromController()
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        RefreshPlaySelectionFromController();
+
+        if (experimentFadeToggle != null)
+        {
+            experimentFadeToggle.SetIsOnWithoutNotify(
+                rallyController.ExperimentFadeEnabled
+            );
+        }
+
+        RefreshDynamicShiftToggleFromController();
+    }
+
+
+    // =========================================================
+    // Dynamic Shift Toggle
+    // =========================================================
+
+    private void BindDynamicShiftToggle()
+    {
+        if (dynamicShiftToggle == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにDynamic Shift Toggleが設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        if (dhitController == null)
+        {
+            Debug.LogWarning(
+                "UIControllerにDHITControllerが設定されていません。" +
+                "Dynamic Shift Toggleは使用できません。",
+                this
+            );
+
+            dynamicShiftToggle.interactable =
+                false;
+
+            return;
+        }
+
+        dynamicShiftToggle.interactable =
+            true;
+
+        dynamicShiftToggle.SetIsOnWithoutNotify(
+            dhitController.IsDynamic
+        );
+
+        dynamicShiftToggle.onValueChanged.AddListener(
+            OnDynamicShiftToggleChanged
+        );
+    }
+
+
+    private void OnDynamicShiftToggleChanged(
+        bool enabled
+    )
+    {
+        if (dhitController == null)
+        {
+            return;
+        }
+
+        dhitController.SetDynamicEnabled(
+            enabled
+        );
+
+        /*
+         * Dynamic ON/OFFを切り替えても、
+         * Shift UIにはFinal ShiftではなくBase Shiftを表示する。
+         */
+        RefreshShiftControlsFromController();
+
+        UpdateOutputText();
+    }
+
+
+    private void RefreshDynamicShiftToggleFromController()
+    {
+        if (dynamicShiftToggle == null ||
+            dhitController == null)
+        {
+            return;
+        }
+
+        dynamicShiftToggle.SetIsOnWithoutNotify(
+            dhitController.IsDynamic
+        );
+    }
+
+
+    // =========================================================
     // Shift
     // =========================================================
 
@@ -613,21 +848,66 @@ public class UIController : MonoBehaviour
             shiftSlider,
             shiftInputField,
 
-            () =>
-                imageController.shiftPixels,
+            GetBaseShiftPixels,
 
-            value =>
-                imageController.shiftPixels =
-                    Mathf.RoundToInt(
-                        value
-                    ),
+            SetBaseShiftPixels,
 
             shiftMin,
             shiftMax,
 
-            "F0",
+            "F3",
 
-            true
+            false
+        );
+    }
+
+
+    private float GetBaseShiftPixels()
+    {
+        if (dhitController != null)
+        {
+            return dhitController.BaseShiftPixels;
+        }
+
+        return imageController != null
+            ? imageController.shiftPixels
+            : 0.0f;
+    }
+
+
+    private void SetBaseShiftPixels(
+        float value
+    )
+    {
+        if (dhitController != null)
+        {
+            dhitController.SetBaseShiftPixels(
+                value
+            );
+
+            return;
+        }
+
+        /*
+         * DHITController未設定時だけImageControllerへ直接書く。
+         * 通常はDHITControllerをShiftの唯一の所有者として使う。
+         */
+        if (imageController != null)
+        {
+            imageController.shiftPixels =
+                value;
+        }
+    }
+
+
+    private void RefreshShiftControlsFromController()
+    {
+        RefreshParameter(
+            shiftSlider,
+            shiftInputField,
+            GetBaseShiftPixels(),
+            "F3",
+            false
         );
     }
 
@@ -1178,13 +1458,7 @@ public class UIController : MonoBehaviour
             .SynchronizePolarFromCartesian();
 
 
-        RefreshParameter(
-            shiftSlider,
-            shiftInputField,
-            imageController.shiftPixels,
-            "F0",
-            true
-        );
+        RefreshShiftControlsFromController();
 
 
         RefreshParameter(
@@ -1255,6 +1529,9 @@ public class UIController : MonoBehaviour
                 .orbitThetaDeg,
             "F1"
         );
+
+
+        RefreshRallyControlsFromController();
 
 
         UpdateOutputText();
@@ -1642,12 +1919,34 @@ public class UIController : MonoBehaviour
                 .stereoCameraPosition;
 
 
+        float baseShiftPixels =
+            GetBaseShiftPixels();
+
+        float dynamicShiftPixels =
+            dhitController != null
+                ? dhitController.CurrentDynamicShiftPixels
+                : 0.0f;
+
+        string shiftMode =
+            dhitController != null
+                ? (dhitController.IsDynamic ? "Dynamic" : "Static")
+                : "Direct";
+
+
         string text =
 
             "<b>Image Parameters</b>\n" +
 
-            $"Shift Pixels : " +
-            $"{imageController.shiftPixels} px\n\n" +
+            $"Shift Mode : {shiftMode}\n" +
+
+            $"Base Shift : " +
+            $"{baseShiftPixels:F3} px\n" +
+
+            $"Dynamic Shift : " +
+            $"{dynamicShiftPixels:F3} px\n" +
+
+            $"Final Shift : " +
+            $"{imageController.shiftPixels:F3} px\n\n" +
 
 
             "<b>Stereo Camera Parameters</b>\n" +
