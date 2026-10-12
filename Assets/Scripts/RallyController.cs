@@ -34,7 +34,7 @@ public class RallyController : MonoBehaviour
     [Serializable]
     public class RallySettingsData
     {
-        public int version = 1;
+        public int version = 3;
 
         public int startPhaseIndex;
         public int endPhaseIndex;
@@ -50,6 +50,10 @@ public class RallyController : MonoBehaviour
         public float receiveApexHeight;
         public float receiveBackspinRpm;
         public int receiveContactFixedFrames;
+
+        // version 3以降:
+        // Setter PositionのLocal Positionを保存する。
+        public Vector3 setterLocalPosition;
 
         public int tossSideIndex;
         public float tossTargetZOffset;
@@ -668,13 +672,20 @@ public class RallyController : MonoBehaviour
 
     [Tooltip(
         "Rally Save / Loadで使用するJSONファイル名。\n" +
-        "BuildではApplication.persistentDataPath内に保存 / 読込する。"
+        "EditorではAssets/Experiment/Rallies以下に保存し、Gitで共有できる。\n" +
+        "BuildではApplication.persistentDataPath/Experiment/Ralliesを使用する。"
     )]
     [SerializeField]
     private string defaultRallyJsonFileName =
         "rally_settings.json";
 
-    private string lastRallyJsonDirectory;
+    [Tooltip(
+        "EditorでAssetsフォルダから見たRally JSON保存先。\n" +
+        "通常はExperiment/Ralliesのままで使用する。"
+    )]
+    [SerializeField]
+    private string rallyJsonRelativeFolder =
+        "Experiment/Rallies";
 
 
     // ============================================================
@@ -794,7 +805,7 @@ public class RallyController : MonoBehaviour
         dhitController != null
             ? dhitController.BaseShiftPixels
             : (imageController != null
-                ? imageController.shiftPixels
+                ? imageController.ShiftPixels
                 : 0.0f);
 
     public float ReceiveApexHeight =>
@@ -805,6 +816,11 @@ public class RallyController : MonoBehaviour
 
     public int ReceiveContactFixedFrames =>
         receiveContactFixedFrames;
+
+    public Vector3 SetterLocalPosition =>
+        setterPosition != null
+            ? setterPosition.localPosition
+            : Vector3.zero;
 
     public float SetSpinRpm =>
         setSpinRpm;
@@ -1935,7 +1951,7 @@ public class RallyController : MonoBehaviour
 
         return new RallySettingsData
         {
-            version = 2,
+            version = 3,
 
             startPhaseIndex =
                 (int)startPhase,
@@ -1969,6 +1985,9 @@ public class RallyController : MonoBehaviour
 
             receiveContactFixedFrames =
                 receiveContactFixedFrames,
+
+            setterLocalPosition =
+                SetterLocalPosition,
 
             tossSideIndex =
                 (int)selectedTossSide,
@@ -2139,6 +2158,19 @@ public class RallyController : MonoBehaviour
                 data.receiveContactFixedFrames
             );
 
+        /*
+         * version 3以降ではSetter PositionもRally条件として復元する。
+         * 旧JSONではVector3.zeroで上書きしない。
+         */
+        if (
+            data.version >= 3 &&
+            setterPosition != null
+        )
+        {
+            setterPosition.localPosition =
+                data.setterLocalPosition;
+        }
+
         selectedTossSide =
             (TossSide)Mathf.Clamp(
                 data.tossSideIndex,
@@ -2281,8 +2313,9 @@ public class RallyController : MonoBehaviour
             }
             else if (imageController != null)
             {
-                imageController.shiftPixels =
-                    data.baseShiftPixels;
+                imageController.SetShiftPixels(
+                    data.baseShiftPixels
+                );
 
                 Debug.LogWarning(
                     "[RallyController] DHITControllerが未設定のため、" +
@@ -2411,15 +2444,20 @@ public class RallyController : MonoBehaviour
                 Directory.CreateDirectory(
                     directory
                 );
-
-                lastRallyJsonDirectory =
-                    directory;
             }
 
             File.WriteAllText(
                 path,
                 json
             );
+
+#if UNITY_EDITOR
+            /*
+             * Assets配下へ保存したJSONを
+             * Unity Projectウィンドウへ即時反映する。
+             */
+            UnityEditor.AssetDatabase.Refresh();
+#endif
 
             Debug.Log(
                 "[RallyController] Rally Settings Saved\n" +
@@ -2492,19 +2530,6 @@ public class RallyController : MonoBehaviour
                 true
             );
 
-            string directory =
-                Path.GetDirectoryName(
-                    path
-                );
-
-            if (!string.IsNullOrWhiteSpace(
-                directory
-            ))
-            {
-                lastRallyJsonDirectory =
-                    directory;
-            }
-
             Debug.Log(
                 "[RallyController] Rally Settings Loaded\n" +
                 $"Path = {path}\n" +
@@ -2535,21 +2560,45 @@ public class RallyController : MonoBehaviour
 
     private string RequestRallySavePath()
     {
-#if UNITY_EDITOR
-        string initialDirectory =
-            GetRallyInitialDirectory();
+        string rallyDirectory =
+            GetRallyJsonDirectory();
 
+#if UNITY_EDITOR
         string fileNameWithoutExtension =
             Path.GetFileNameWithoutExtension(
                 GetDefaultRallyJsonFileName()
             );
 
-        return UnityEditor.EditorUtility.SaveFilePanel(
-            "Save Rally Settings",
-            initialDirectory,
-            fileNameWithoutExtension,
-            "json"
-        );
+        string path =
+            UnityEditor.EditorUtility.SaveFilePanel(
+                "Save Rally Settings",
+                rallyDirectory,
+                fileNameWithoutExtension,
+                "json"
+            );
+
+        if (string.IsNullOrWhiteSpace(
+            path
+        ))
+        {
+            return path;
+        }
+
+        if (!IsPathInsideDirectory(
+            path,
+            rallyDirectory
+        ))
+        {
+            Debug.LogError(
+                "[RallyController] Rally JSONは固定フォルダ内に保存してください。\n" +
+                $"Folder = {rallyDirectory}\n" +
+                $"Selected = {path}"
+            );
+
+            return null;
+        }
+
+        return path;
 #else
         return GetDefaultRallyJsonPath();
 #endif
@@ -2558,41 +2607,136 @@ public class RallyController : MonoBehaviour
 
     private string RequestRallyLoadPath()
     {
+        string rallyDirectory =
+            GetRallyJsonDirectory();
+
 #if UNITY_EDITOR
-        return UnityEditor.EditorUtility.OpenFilePanel(
-            "Load Rally Settings",
-            GetRallyInitialDirectory(),
-            "json"
-        );
+        string path =
+            UnityEditor.EditorUtility.OpenFilePanel(
+                "Load Rally Settings",
+                rallyDirectory,
+                "json"
+            );
+
+        if (string.IsNullOrWhiteSpace(
+            path
+        ))
+        {
+            return path;
+        }
+
+        if (!IsPathInsideDirectory(
+            path,
+            rallyDirectory
+        ))
+        {
+            Debug.LogError(
+                "[RallyController] Rally JSONは固定フォルダ内から読み込んでください。\n" +
+                $"Folder = {rallyDirectory}\n" +
+                $"Selected = {path}"
+            );
+
+            return null;
+        }
+
+        return path;
 #else
         return GetDefaultRallyJsonPath();
 #endif
     }
 
 
-    private string GetRallyInitialDirectory()
+    /// <summary>
+    /// Rally JSONの固定保存先を返す。
+    /// EditorではAssets/Experiment/Rallies、
+    /// BuildではpersistentDataPath/Experiment/Ralliesを使用する。
+    /// </summary>
+    public string GetRallyJsonDirectory()
     {
-        if (
-            !string.IsNullOrWhiteSpace(
-                lastRallyJsonDirectory
-            ) &&
-            Directory.Exists(
-                lastRallyJsonDirectory
+        string relativeFolder =
+            string.IsNullOrWhiteSpace(
+                rallyJsonRelativeFolder
             )
-        )
-        {
-            return lastRallyJsonDirectory;
-        }
+                ? Path.Combine(
+                    "Experiment",
+                    "Rallies"
+                )
+                : rallyJsonRelativeFolder.Trim()
+                    .Replace(
+                        '/',
+                        Path.DirectorySeparatorChar
+                    )
+                    .Replace(
+                        '\\',
+                        Path.DirectorySeparatorChar
+                    );
 
-        return Application.persistentDataPath;
+#if UNITY_EDITOR
+        string directory =
+            Path.Combine(
+                Application.dataPath,
+                relativeFolder
+            );
+#else
+        string directory =
+            Path.Combine(
+                Application.persistentDataPath,
+                relativeFolder
+            );
+#endif
+
+        Directory.CreateDirectory(
+            directory
+        );
+
+        return Path.GetFullPath(
+            directory
+        );
     }
 
 
     public string GetDefaultRallyJsonPath()
     {
         return Path.Combine(
-            Application.persistentDataPath,
+            GetRallyJsonDirectory(),
             GetDefaultRallyJsonFileName()
+        );
+    }
+
+
+    private static bool IsPathInsideDirectory(
+        string path,
+        string directory
+    )
+    {
+        if (string.IsNullOrWhiteSpace(
+            path
+        ) ||
+            string.IsNullOrWhiteSpace(
+                directory
+            ))
+        {
+            return false;
+        }
+
+        string fullPath =
+            Path.GetFullPath(
+                path
+            );
+
+        string fullDirectory =
+            Path.GetFullPath(
+                directory
+            )
+            .TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            ) +
+            Path.DirectorySeparatorChar;
+
+        return fullPath.StartsWith(
+            fullDirectory,
+            StringComparison.OrdinalIgnoreCase
         );
     }
 
@@ -2747,6 +2891,24 @@ public class RallyController : MonoBehaviour
             Vector3.zero;
 
         ApplyAllServeTargetOffsets();
+    }
+
+    public void SetSetterLocalPosition(
+        Vector3 localPosition
+    )
+    {
+        if (setterPosition == null)
+        {
+            Debug.LogWarning(
+                "[RallyController] Setter Positionが設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        setterPosition.localPosition =
+            localPosition;
     }
 
     public void SetTossSide(

@@ -7,17 +7,19 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Setter Tossİ’èê—pUIB
+/// Setter Tossè¨­å®šå°‚ç”¨UIã€‚
 ///
-/// –ğŠ„:
-/// - Toss Side (Left / Right) ‚Ì‘I‘ğ
-/// - Set Height (Setter TossÅ‚“’BWorld Y) ‚Ì•ÏX
-/// - Toss Target Z Offset ‚Ì•ÏX
-/// - Setİ’è‚ÌJSON Save / Load
-/// - Main Panel <-> Set Panel ‚ÌØ‚è‘Ö‚¦
+/// å½¹å‰²:
+/// - Toss Side (Left / Right) ã®é¸æŠ
+/// - Set Height (Setter Tossæœ€é«˜åˆ°é”World Y) ã®å¤‰æ›´
+/// - Toss Target Z Offset ã®å¤‰æ›´
+/// - Setter Position Local XYZ ã®å¤‰æ›´
+/// - Toss Phaseã®Fade Delayã®å¤‰æ›´
+/// - Setè¨­å®šã®JSON Save / Load
+/// - Main Panel <-> Set Panel ã®åˆ‡ã‚Šæ›¿ãˆ
 ///
-/// ÀÛ‚ÌƒvƒŒ[İ’è’l‚ÍRallyController‚ª•Û‚µA
-/// ‚±‚ÌƒNƒ‰ƒX‚ÍUI‚©‚çRallyController‚ğ‘€ì‚·‚é‚¾‚¯‚É‚·‚éB
+/// å®Ÿéš›ã®ãƒ—ãƒ¬ãƒ¼è¨­å®šå€¤ã¯RallyControllerãŒä¿æŒã—ã€
+/// ã“ã®ã‚¯ãƒ©ã‚¹ã¯UIã‹ã‚‰RallyControllerã‚’æ“ä½œã™ã‚‹ã ã‘ã«ã™ã‚‹ã€‚
 /// </summary>
 public class SetUIController : MonoBehaviour
 {
@@ -37,23 +39,23 @@ public class SetUIController : MonoBehaviour
 
     [Header("Panel Navigation")]
 
-    [Tooltip("ƒvƒŒ[‘I‘ğ‚È‚Ç‚ğ’u‚¢‚½ƒƒCƒ“Panel")]
+    [Tooltip("ãƒ—ãƒ¬ãƒ¼é¸æŠãªã©ã‚’ç½®ã„ãŸãƒ¡ã‚¤ãƒ³Panel")]
     [SerializeField]
     private GameObject mainPanel;
 
-    [Tooltip("Setİ’èPanel")]
+    [Tooltip("Setè¨­å®šPanel")]
     [SerializeField]
     private GameObject setPanel;
 
-    [Tooltip("Main‰æ–Ê‚É‚ ‚éSet ButtonB–¢İ’è‚Å‚à‰ÂB")]
+    [Tooltip("Mainç”»é¢ã«ã‚ã‚‹Set Buttonã€‚æœªè¨­å®šã§ã‚‚å¯ã€‚")]
     [SerializeField]
     private Button openSetButton;
 
-    [Tooltip("Set‰æ–Ê‚ÌBack Button")]
+    [Tooltip("Setç”»é¢ã®Back Button")]
     [SerializeField]
     private Button backButton;
 
-    [Tooltip("ŠJn‚ÉMain Panel‚ğ•\¦‚µSet Panel‚ğ‰B‚·")]
+    [Tooltip("é–‹å§‹æ™‚ã«Main Panelã‚’è¡¨ç¤ºã—Set Panelã‚’éš ã™")]
     [SerializeField]
     private bool showMainPanelOnStart =
         false;
@@ -76,13 +78,31 @@ public class SetUIController : MonoBehaviour
 
     [Header("Set Parameters")]
 
-    [Tooltip("Setter Toss‚ÌÅ‚“’BWorld Y [m]")]
+    [Tooltip("Setter Tossã®æœ€é«˜åˆ°é”World Y [m]")]
     [SerializeField]
     private TMP_InputField setHeightInputField;
 
-    [Tooltip("‘I‘ğ‚µ‚½Toss Target‚É‰Á‚¦‚éZ•ûŒüOffset [m]")]
+    [Tooltip("é¸æŠã—ãŸToss Targetã«åŠ ãˆã‚‹Zæ–¹å‘Offset [m]")]
     [SerializeField]
     private TMP_InputField offsetZInputField;
+
+    [Header("Setter Position")]
+
+    [Tooltip("Setter Positionã®Local X [m]")]
+    [SerializeField]
+    private TMP_InputField setterPositionXInputField;
+
+    [Tooltip("Setter Positionã®Local Y [m]")]
+    [SerializeField]
+    private TMP_InputField setterPositionYInputField;
+
+    [Tooltip("Setter Positionã®Local Z [m]")]
+    [SerializeField]
+    private TMP_InputField setterPositionZInputField;
+
+    [Tooltip("Tossé–‹å§‹ã‹ã‚‰Fade Outé–‹å§‹ã¾ã§ã®æ™‚é–“ [s]")]
+    [SerializeField]
+    private TMP_InputField fadeInputField;
 
 
     // ============================================================
@@ -97,7 +117,7 @@ public class SetUIController : MonoBehaviour
     [SerializeField]
     private Button loadButton;
 
-    [Tooltip("Build‚Ég—p‚·‚éŠù’èJSONƒtƒ@ƒCƒ‹–¼BEditor‚Å‚ÍSave/Loadƒ_ƒCƒAƒƒO‚ğ•\¦‚·‚éB")]
+    [Tooltip("Buildæ™‚ã«ä½¿ç”¨ã™ã‚‹æ—¢å®šJSONãƒ•ã‚¡ã‚¤ãƒ«åã€‚Editorã§ã¯Save/Loadãƒ€ã‚¤ã‚¢ãƒ­ã‚°ã‚’è¡¨ç¤ºã™ã‚‹ã€‚")]
     [SerializeField]
     private string defaultJsonFileName =
         "set_settings.json";
@@ -121,11 +141,15 @@ public class SetUIController : MonoBehaviour
     [Serializable]
     private class SetSettingsData
     {
-        public int version = 1;
+        public int version = 3;
 
         public int tossSideIndex;
         public float setHeight;
         public float offsetZ;
+        public float fadeDelaySeconds;
+
+        // version 3ä»¥é™
+        public Vector3 setterLocalPosition;
     }
 
 
@@ -138,7 +162,7 @@ public class SetUIController : MonoBehaviour
         if (rallyController == null)
         {
             Debug.LogError(
-                "[SetUIController] RallyController‚ªİ’è‚³‚ê‚Ä‚¢‚Ü‚¹‚ñB",
+                "[SetUIController] RallyControllerãŒè¨­å®šã•ã‚Œã¦ã„ã¾ã›ã‚“ã€‚",
                 this
             );
 
@@ -216,7 +240,7 @@ public class SetUIController : MonoBehaviour
         if (tossSideDropdown == null)
         {
             Debug.LogWarning(
-                "[SetUIController] Toss Side Dropdown‚ªİ’è‚³‚ê‚Ä‚¢‚Ü‚¹‚ñB",
+                "[SetUIController] Toss Side DropdownãŒè¨­å®šã•ã‚Œã¦ã„ã¾ã›ã‚“ã€‚",
                 this
             );
 
@@ -242,6 +266,22 @@ public class SetUIController : MonoBehaviour
 
         ConfigureDecimalInputField(
             offsetZInputField
+        );
+
+        ConfigureDecimalInputField(
+            setterPositionXInputField
+        );
+
+        ConfigureDecimalInputField(
+            setterPositionYInputField
+        );
+
+        ConfigureDecimalInputField(
+            setterPositionZInputField
+        );
+
+        ConfigureDecimalInputField(
+            fadeInputField
         );
     }
 
@@ -313,6 +353,34 @@ public class SetUIController : MonoBehaviour
                 OnOffsetZEndEdit
             );
         }
+
+        if (setterPositionXInputField != null)
+        {
+            setterPositionXInputField.onEndEdit.AddListener(
+                OnSetterPositionXEndEdit
+            );
+        }
+
+        if (setterPositionYInputField != null)
+        {
+            setterPositionYInputField.onEndEdit.AddListener(
+                OnSetterPositionYEndEdit
+            );
+        }
+
+        if (setterPositionZInputField != null)
+        {
+            setterPositionZInputField.onEndEdit.AddListener(
+                OnSetterPositionZEndEdit
+            );
+        }
+
+        if (fadeInputField != null)
+        {
+            fadeInputField.onEndEdit.AddListener(
+                OnFadeEndEdit
+            );
+        }
     }
 
     private void UnbindUI()
@@ -363,6 +431,34 @@ public class SetUIController : MonoBehaviour
         {
             offsetZInputField.onEndEdit.RemoveListener(
                 OnOffsetZEndEdit
+            );
+        }
+
+        if (setterPositionXInputField != null)
+        {
+            setterPositionXInputField.onEndEdit.RemoveListener(
+                OnSetterPositionXEndEdit
+            );
+        }
+
+        if (setterPositionYInputField != null)
+        {
+            setterPositionYInputField.onEndEdit.RemoveListener(
+                OnSetterPositionYEndEdit
+            );
+        }
+
+        if (setterPositionZInputField != null)
+        {
+            setterPositionZInputField.onEndEdit.RemoveListener(
+                OnSetterPositionZEndEdit
+            );
+        }
+
+        if (fadeInputField != null)
+        {
+            fadeInputField.onEndEdit.RemoveListener(
+                OnFadeEndEdit
             );
         }
     }
@@ -449,6 +545,114 @@ public class SetUIController : MonoBehaviour
         RefreshFromRallyController();
     }
 
+    private void OnSetterPositionXEndEdit(
+        string text
+    )
+    {
+        ApplySetterPositionComponent(
+            text,
+            0
+        );
+    }
+
+    private void OnSetterPositionYEndEdit(
+        string text
+    )
+    {
+        ApplySetterPositionComponent(
+            text,
+            1
+        );
+    }
+
+    private void OnSetterPositionZEndEdit(
+        string text
+    )
+    {
+        ApplySetterPositionComponent(
+            text,
+            2
+        );
+    }
+
+    private void ApplySetterPositionComponent(
+        string text,
+        int axis
+    )
+    {
+        if (
+            isSynchronizing ||
+            rallyController == null
+        )
+        {
+            return;
+        }
+
+        if (!TryParseFloat(
+            text,
+            out float value
+        ))
+        {
+            RefreshFromRallyController();
+            return;
+        }
+
+        Vector3 position =
+            rallyController.SetterLocalPosition;
+
+        switch (axis)
+        {
+            case 0:
+                position.x =
+                    value;
+                break;
+
+            case 1:
+                position.y =
+                    value;
+                break;
+
+            case 2:
+                position.z =
+                    value;
+                break;
+        }
+
+        rallyController.SetSetterLocalPosition(
+            position
+        );
+
+        RefreshFromRallyController();
+    }
+
+    private void OnFadeEndEdit(
+        string text
+    )
+    {
+        if (
+            isSynchronizing ||
+            rallyController == null
+        )
+        {
+            return;
+        }
+
+        if (!TryParseFloat(
+            text,
+            out float value
+        ))
+        {
+            RefreshFromRallyController();
+            return;
+        }
+
+        rallyController.SetTossFadeDelay(
+            value
+        );
+
+        RefreshFromRallyController();
+    }
+
     private void ApplyAllInputFields()
     {
         if (rallyController == null)
@@ -475,6 +679,74 @@ public class SetUIController : MonoBehaviour
         ApplyInputField(
             offsetZInputField,
             rallyController.SetTossTargetZOffset
+        );
+
+        ApplySetterPositionInputFields();
+
+        ApplyInputField(
+            fadeInputField,
+            rallyController.SetTossFadeDelay
+        );
+    }
+
+    private void ApplySetterPositionInputFields()
+    {
+        if (rallyController == null)
+        {
+            return;
+        }
+
+        Vector3 position =
+            rallyController.SetterLocalPosition;
+
+        if (TryParseInputField(
+            setterPositionXInputField,
+            out float x
+        ))
+        {
+            position.x =
+                x;
+        }
+
+        if (TryParseInputField(
+            setterPositionYInputField,
+            out float y
+        ))
+        {
+            position.y =
+                y;
+        }
+
+        if (TryParseInputField(
+            setterPositionZInputField,
+            out float z
+        ))
+        {
+            position.z =
+                z;
+        }
+
+        rallyController.SetSetterLocalPosition(
+            position
+        );
+    }
+
+    private static bool TryParseInputField(
+        TMP_InputField inputField,
+        out float value
+    )
+    {
+        value =
+            0.0f;
+
+        if (inputField == null)
+        {
+            return false;
+        }
+
+        return TryParseFloat(
+            inputField.text,
+            out value
         );
     }
 
@@ -534,6 +806,29 @@ public class SetUIController : MonoBehaviour
             SetInputFieldValue(
                 offsetZInputField,
                 rallyController.TossTargetZOffset
+            );
+
+            Vector3 setterLocalPosition =
+                rallyController.SetterLocalPosition;
+
+            SetInputFieldValue(
+                setterPositionXInputField,
+                setterLocalPosition.x
+            );
+
+            SetInputFieldValue(
+                setterPositionYInputField,
+                setterLocalPosition.y
+            );
+
+            SetInputFieldValue(
+                setterPositionZInputField,
+                setterLocalPosition.z
+            );
+
+            SetInputFieldValue(
+                fadeInputField,
+                rallyController.TossFadeDelay
             );
         }
         finally
@@ -627,7 +922,7 @@ public class SetUIController : MonoBehaviour
         catch (Exception exception)
         {
             Debug.LogError(
-                "[SetUIController] JSON•Û‘¶‚É¸”s‚µ‚Ü‚µ‚½B\n" +
+                "[SetUIController] JSONä¿å­˜ã«å¤±æ•—ã—ã¾ã—ãŸã€‚\n" +
                 $"Path = {path}\n" +
                 exception
             );
@@ -661,7 +956,7 @@ public class SetUIController : MonoBehaviour
         ))
         {
             Debug.LogError(
-                "[SetUIController] JSONƒtƒ@ƒCƒ‹‚ª‘¶İ‚µ‚Ü‚¹‚ñB\n" +
+                "[SetUIController] JSONãƒ•ã‚¡ã‚¤ãƒ«ãŒå­˜åœ¨ã—ã¾ã›ã‚“ã€‚\n" +
                 $"Path = {path}"
             );
 
@@ -683,7 +978,7 @@ public class SetUIController : MonoBehaviour
             if (data == null)
             {
                 Debug.LogError(
-                    "[SetUIController] JSON‚ğ“Ç‚İ‚ß‚Ü‚¹‚ñ‚Å‚µ‚½B"
+                    "[SetUIController] JSONã‚’èª­ã¿è¾¼ã‚ã¾ã›ã‚“ã§ã—ãŸã€‚"
                 );
 
                 return;
@@ -714,7 +1009,7 @@ public class SetUIController : MonoBehaviour
         catch (Exception exception)
         {
             Debug.LogError(
-                "[SetUIController] JSON“Ç‚É¸”s‚µ‚Ü‚µ‚½B\n" +
+                "[SetUIController] JSONèª­è¾¼ã«å¤±æ•—ã—ã¾ã—ãŸã€‚\n" +
                 $"Path = {path}\n" +
                 exception
             );
@@ -725,7 +1020,7 @@ public class SetUIController : MonoBehaviour
     {
         return new SetSettingsData
         {
-            version = 1,
+            version = 3,
 
             tossSideIndex =
                 (int)rallyController.CurrentTossSide,
@@ -734,7 +1029,13 @@ public class SetUIController : MonoBehaviour
                 rallyController.SetterTossApexHeight,
 
             offsetZ =
-                rallyController.TossTargetZOffset
+                rallyController.TossTargetZOffset,
+
+            fadeDelaySeconds =
+                rallyController.TossFadeDelay,
+
+            setterLocalPosition =
+                rallyController.SetterLocalPosition
         };
     }
 
@@ -757,6 +1058,28 @@ public class SetUIController : MonoBehaviour
         rallyController.SetTossTargetZOffset(
             data.offsetZ
         );
+
+        /*
+         * version 2ä»¥é™ã§Fade Delayã‚’ä¿å­˜ã™ã‚‹ã€‚
+         * æ—§version 1 JSONã§ã¯ç¾åœ¨ã®Fade Delayã‚’ä¿æŒã™ã‚‹ã€‚
+         */
+        if (data.version >= 2)
+        {
+            rallyController.SetTossFadeDelay(
+                data.fadeDelaySeconds
+            );
+        }
+
+        /*
+         * version 3ä»¥é™ã§Setter Positionã‚’ä¿å­˜ã™ã‚‹ã€‚
+         * æ—§JSONã§ã¯ç¾åœ¨ã®Setter Positionã‚’ä¿æŒã™ã‚‹ã€‚
+         */
+        if (data.version >= 3)
+        {
+            rallyController.SetSetterLocalPosition(
+                data.setterLocalPosition
+            );
+        }
 
         RefreshFromRallyController();
     }
