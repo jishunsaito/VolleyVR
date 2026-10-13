@@ -13,7 +13,7 @@ using UnityEngine.UI;
 /// - Spike Course (Straight / Cross) の選択
 /// - Spike Speed の変更
 /// - Spike用Fade Delayの変更
-/// - Left / Right のSpike TargetへXYZ Offsetを付与
+/// - Left / Right のSpike Targetを軌道方向へ距離R [m]だけ移動
 /// - Spike設定のJSON Save / Load
 /// - Main Panel <-> Spike Panel の切り替え
 ///
@@ -96,14 +96,12 @@ public class SpikeUIController : MonoBehaviour
     [SerializeField]
     private TMP_Dropdown offsetTargetDropdown;
 
+    [Tooltip(
+        "Spike Contact -> 基準Spike TargetのXZ方向へ移動する符号付き距離R [m]。\n" +
+        "+ = 軌道方向へ遠ざける / - = Contact側へ近づける"
+    )]
     [SerializeField]
-    private TMP_InputField offsetXInputField;
-
-    [SerializeField]
-    private TMP_InputField offsetYInputField;
-
-    [SerializeField]
-    private TMP_InputField offsetZInputField;
+    private TMP_InputField distanceOffsetInputField;
 
 
     // ============================================================
@@ -145,7 +143,7 @@ public class SpikeUIController : MonoBehaviour
     [Serializable]
     private class SpikeSettingsData
     {
-        public int version = 1;
+        public int version = 2;
 
         public int spikeCourseIndex;
         public float speedKmh;
@@ -153,6 +151,11 @@ public class SpikeUIController : MonoBehaviour
 
         public int offsetTargetIndex;
 
+        // version 2以降
+        public float leftTargetDistanceOffsetMeters;
+        public float rightTargetDistanceOffsetMeters;
+
+        // version 1互換用
         public Vector3 leftTargetOffset;
         public Vector3 rightTargetOffset;
     }
@@ -304,15 +307,7 @@ public class SpikeUIController : MonoBehaviour
         );
 
         ConfigureDecimalInput(
-            offsetXInputField
-        );
-
-        ConfigureDecimalInput(
-            offsetYInputField
-        );
-
-        ConfigureDecimalInput(
-            offsetZInputField
+            distanceOffsetInputField
         );
     }
 
@@ -389,18 +384,8 @@ public class SpikeUIController : MonoBehaviour
         );
 
         BindInputField(
-            offsetXInputField,
-            OnOffsetEndEdit
-        );
-
-        BindInputField(
-            offsetYInputField,
-            OnOffsetEndEdit
-        );
-
-        BindInputField(
-            offsetZInputField,
-            OnOffsetEndEdit
+            distanceOffsetInputField,
+            OnDistanceOffsetEndEdit
         );
     }
 
@@ -459,18 +444,8 @@ public class SpikeUIController : MonoBehaviour
         );
 
         UnbindInputField(
-            offsetXInputField,
-            OnOffsetEndEdit
-        );
-
-        UnbindInputField(
-            offsetYInputField,
-            OnOffsetEndEdit
-        );
-
-        UnbindInputField(
-            offsetZInputField,
-            OnOffsetEndEdit
+            distanceOffsetInputField,
+            OnDistanceOffsetEndEdit
         );
     }
 
@@ -539,7 +514,7 @@ public class SpikeUIController : MonoBehaviour
                 1
             );
 
-        RefreshOffsetFields();
+        RefreshDistanceOffsetField();
     }
 
 
@@ -589,50 +564,65 @@ public class SpikeUIController : MonoBehaviour
 
 
     // ============================================================
-    // Target Offset Events
+    // Target Distance Offset Events
     // ============================================================
 
-    private void OnOffsetEndEdit(
-        string unused
+    private void OnDistanceOffsetEndEdit(
+        string text
     )
     {
-        ApplyOffsetFields();
-        RefreshOffsetFields();
-    }
-
-    private void ApplyOffsetFields()
-    {
         if (
-            !TryParseFloat(
-                offsetXInputField != null
-                    ? offsetXInputField.text
-                    : string.Empty,
-                out float x
-            ) ||
-            !TryParseFloat(
-                offsetYInputField != null
-                    ? offsetYInputField.text
-                    : string.Empty,
-                out float y
-            ) ||
-            !TryParseFloat(
-                offsetZInputField != null
-                    ? offsetZInputField.text
-                    : string.Empty,
-                out float z
-            )
+            isSynchronizing ||
+            rallyController == null
         )
         {
             return;
         }
 
-        rallyController.SetSpikeTargetOffset(
+
+        if (!TryParseFloat(
+            text,
+            out float distanceMeters
+        ))
+        {
+            RefreshDistanceOffsetField();
+            return;
+        }
+
+
+        rallyController.SetSpikeTargetDistanceOffset(
             currentOffsetTargetIndex,
-            new Vector3(
-                x,
-                y,
-                z
-            )
+            distanceMeters
+        );
+
+
+        RefreshDistanceOffsetField();
+    }
+
+
+    private void ApplyDistanceOffsetField()
+    {
+        if (
+            rallyController == null ||
+            distanceOffsetInputField == null
+        )
+        {
+            return;
+        }
+
+
+        if (!TryParseFloat(
+            distanceOffsetInputField.text,
+            out float distanceMeters
+        ))
+        {
+            return;
+        }
+
+
+        rallyController.SetSpikeTargetDistanceOffset(
+            currentOffsetTargetIndex,
+            distanceMeters
         );
     }
 
@@ -665,7 +655,7 @@ public class SpikeUIController : MonoBehaviour
             rallyController.SetSpikeFadeDelay
         );
 
-        ApplyOffsetFields();
+        ApplyDistanceOffsetField();
     }
 
     private static void ApplyFloatIfValid(
@@ -739,34 +729,24 @@ public class SpikeUIController : MonoBehaviour
                 false;
         }
 
-        RefreshOffsetFields();
+        RefreshDistanceOffsetField();
     }
 
-    private void RefreshOffsetFields()
+    private void RefreshDistanceOffsetField()
     {
         if (rallyController == null)
         {
             return;
         }
 
-        Vector3 offset =
-            rallyController.GetSpikeTargetOffset(
+        float distanceMeters =
+            rallyController.GetSpikeTargetDistanceOffset(
                 currentOffsetTargetIndex
             );
 
         SetInputFieldValue(
-            offsetXInputField,
-            offset.x
-        );
-
-        SetInputFieldValue(
-            offsetYInputField,
-            offset.y
-        );
-
-        SetInputFieldValue(
-            offsetZInputField,
-            offset.z
+            distanceOffsetInputField,
+            distanceMeters
         );
     }
 
@@ -952,7 +932,7 @@ public class SpikeUIController : MonoBehaviour
     {
         return new SpikeSettingsData
         {
-            version = 1,
+            version = 2,
 
             spikeCourseIndex =
                 (int)rallyController.CurrentSpikeCourse,
@@ -966,15 +946,23 @@ public class SpikeUIController : MonoBehaviour
             offsetTargetIndex =
                 currentOffsetTargetIndex,
 
-            leftTargetOffset =
-                rallyController.GetSpikeTargetOffset(
+            leftTargetDistanceOffsetMeters =
+                rallyController.GetSpikeTargetDistanceOffset(
                     0
                 ),
 
-            rightTargetOffset =
-                rallyController.GetSpikeTargetOffset(
+            rightTargetDistanceOffsetMeters =
+                rallyController.GetSpikeTargetDistanceOffset(
                     1
-                )
+                ),
+
+            // version 1互換フィールド。
+            // 新R方式ではzeroで保存する。
+            leftTargetOffset =
+                Vector3.zero,
+
+            rightTargetOffset =
+                Vector3.zero
         };
     }
 
@@ -998,15 +986,34 @@ public class SpikeUIController : MonoBehaviour
             data.fadeDelaySeconds
         );
 
-        rallyController.SetSpikeTargetOffset(
-            0,
-            data.leftTargetOffset
-        );
+        if (data.version >= 2)
+        {
+            rallyController.SetSpikeTargetDistanceOffset(
+                0,
+                data.leftTargetDistanceOffsetMeters
+            );
 
-        rallyController.SetSpikeTargetOffset(
-            1,
-            data.rightTargetOffset
-        );
+            rallyController.SetSpikeTargetDistanceOffset(
+                1,
+                data.rightTargetDistanceOffsetMeters
+            );
+        }
+        else
+        {
+            /*
+             * 旧version 1 JSONはXYZ Vector3 Offsetだったため、
+             * そのままLegacy APIへ渡して再現する。
+             */
+            rallyController.SetSpikeTargetOffset(
+                0,
+                data.leftTargetOffset
+            );
+
+            rallyController.SetSpikeTargetOffset(
+                1,
+                data.rightTargetOffset
+            );
+        }
 
         currentOffsetTargetIndex =
             Mathf.Clamp(

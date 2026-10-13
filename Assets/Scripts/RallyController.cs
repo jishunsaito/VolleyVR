@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.IO;
+using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 /// <summary>
 /// ラリー全体の進行を管理する。
@@ -34,7 +36,7 @@ public class RallyController : MonoBehaviour
     [Serializable]
     public class RallySettingsData
     {
-        public int version = 3;
+        public int version = 5;
 
         public int startPhaseIndex;
         public int endPhaseIndex;
@@ -63,12 +65,29 @@ public class RallyController : MonoBehaviour
 
         public int spikeCourseIndex;
         public float spikeSpeedKmh;
+
+        // version 4以降:
+        // Spike Contact -> 基準Spike TargetのXZ方向へ
+        // 何m延長/短縮するかを符号付き距離Rとして保存する。
+        public float spikeTargetLeftDistanceOffsetMeters;
+        public float spikeTargetRightDistanceOffsetMeters;
+
+        // version 3以前との互換用。
+        // 新しいDistance R方式では通常Vector3.zero。
         public Vector3 spikeTargetLeftOffset;
         public Vector3 spikeTargetRightOffset;
 
         public int blockContactFixedFrames;
         public float blockExitSpeedKmh;
         public float blockSpinRpm;
+
+        // version 5以降:
+        // Block Landing PointのLocal Positionそのものを保存する。
+        public Vector3 blockLandingPointLeftLocalPosition;
+        public Vector3 blockLandingPointRightLocalPosition;
+
+        // version 4以前との互換用。
+        // 旧方式では「起動時の基準Local Position + Offset」だった。
         public Vector3 blockLandingPointLeftOffset;
         public Vector3 blockLandingPointRightOffset;
 
@@ -427,20 +446,50 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
-    // Spike Target Offset
+    // Spike Target Distance Offset
     // ============================================================
 
-    [Header("Spike Target Offset")]
+    [Header("Spike Target Distance Offset")]
 
-    [Tooltip("Spike Target Left の基準位置からのLocal Offset [m]")]
+    [Tooltip(
+        "Spike Target Leftを、Spike Contact -> 基準TargetのXZ方向へ" +
+        "何mずらすか。\n" +
+        "+ = 軌道方向へ遠ざける / - = Contact側へ近づける"
+    )]
+    [SerializeField]
+    private float spikeTargetLeftDistanceOffsetMeters =
+        0.0f;
+
+    [Tooltip(
+        "Spike Target Rightを、Spike Contact -> 基準TargetのXZ方向へ" +
+        "何mずらすか。\n" +
+        "+ = 軌道方向へ遠ざける / - = Contact側へ近づける"
+    )]
+    [SerializeField]
+    private float spikeTargetRightDistanceOffsetMeters =
+        0.0f;
+
+
+    // ============================================================
+    // Legacy Spike Target XYZ Offset
+    // ============================================================
+
+    /*
+     * version 3以前のRally JSON / 旧SpikeUIとの互換用。
+     *
+     * 新しいDistance R方式をUIから設定した時点で、
+     * 対応TargetのLegacy Vector3 OffsetはVector3.zeroへ戻す。
+     */
+    [HideInInspector]
     [SerializeField]
     private Vector3 spikeTargetLeftOffset =
         Vector3.zero;
 
-    [Tooltip("Spike Target Right の基準位置からのLocal Offset [m]")]
+    [HideInInspector]
     [SerializeField]
     private Vector3 spikeTargetRightOffset =
         Vector3.zero;
+
 
     private Vector3 spikeTargetLeftBaseLocalPosition;
     private Vector3 spikeTargetRightBaseLocalPosition;
@@ -491,17 +540,23 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
-    // Block Landing Point Offset
+    // Block Landing Point Position / Legacy Offset
     // ============================================================
 
-    [Header("Block Landing Point Offset")]
-
-    [Tooltip("Block Landing Point Left の基準位置からのLocal Offset [m]")]
+    /*
+     * version 5以降:
+     * Block Landing PointはTransform.localPositionそのものを
+     * Rally条件として扱う。
+     *
+     * 以下のOffsetはversion 4以前のJSON互換専用。
+     * 新しいBlockUIからは使用しない。
+     */
+    [HideInInspector]
     [SerializeField]
     private Vector3 blockLandingPointLeftOffset =
         Vector3.zero;
 
-    [Tooltip("Block Landing Point Right の基準位置からのLocal Offset [m]")]
+    [HideInInspector]
     [SerializeField]
     private Vector3 blockLandingPointRightOffset =
         Vector3.zero;
@@ -855,8 +910,14 @@ public class RallyController : MonoBehaviour
         CacheSpikeTargetBasePositions();
         ApplyAllSpikeTargetOffsets();
 
+        /*
+         * 旧version 4以前のOffset JSONを読み込むため、
+         * 起動時の基準位置だけは保持する。
+         *
+         * version 5以降はTransform.localPosition自体が正なので、
+         * 起動時にOffsetは適用しない。
+         */
         CacheBlockLandingPointBasePositions();
-        ApplyAllBlockLandingPointOffsets();
     }
 
     private void Start()
@@ -876,6 +937,24 @@ public class RallyController : MonoBehaviour
         if (!enableKeyboardDebug)
         {
             return;
+        }
+
+        /*
+         * TMP_InputFieldへ数値を入力している最中は、
+         * Alpha1～6 / V / Z のデバッグショートカットを無効化する。
+         */
+        if (EventSystem.current != null)
+        {
+            GameObject selectedObject =
+                EventSystem.current.currentSelectedGameObject;
+
+            if (
+                selectedObject != null &&
+                selectedObject.GetComponent<TMP_InputField>() != null
+            )
+            {
+                return;
+            }
         }
 
         if (Input.GetKeyDown(KeyCode.Alpha1))
@@ -1047,17 +1126,8 @@ public class RallyController : MonoBehaviour
     {
         ValidateSimulationRange();
 
-        /*
-         * 前回TrialのFade状態や、
-         * 実行待ちのFade Timerが残っていても
-         * 新しいTrial開始時には必ず通常表示へ戻す。
-         */
         ResetExperimentFade();
 
-        /*
-         * 新しいTrial開始時はDHITの時間状態だけを初期化する。
-         * Base ShiftはUI / Inspector / Rally JSONで設定された値を保持する。
-         */
         if (dhitController != null)
         {
             dhitController.BeginTrial();
@@ -1068,43 +1138,34 @@ public class RallyController : MonoBehaviour
             case PlayPhase.Serve:
 
                 SpawnBallAtSelectedStart();
-
                 StartSpikeServeSequence();
 
                 break;
 
-
             case PlayPhase.Receive:
 
                 SpawnBallAtSelectedReceiver();
-
                 StartReceiveSequence();
 
                 break;
 
-
             case PlayPhase.Toss:
 
                 SpawnBallAtSetter();
-
                 StartSetterTossSequence();
 
                 break;
 
-
             case PlayPhase.Spike:
 
                 SpawnBallAtSelectedTossTarget();
-
                 StartSpikeSequence();
 
                 break;
 
-
             case PlayPhase.Block:
 
                 SpawnBallAtSelectedTossTarget();
-
                 StartSpikeSequence();
 
                 break;
@@ -1120,16 +1181,8 @@ public class RallyController : MonoBehaviour
     {
         ValidateSimulationRange();
 
-        /*
-         * ZキーによるResetを含め、
-         * Ball Reset時にはFadeも必ず解除する。
-         */
         ResetExperimentFade();
 
-        /*
-         * Reset時はDynamic追加量を0へ戻し、
-         * 表示ShiftをBase Shiftへ戻す。
-         */
         if (dhitController != null)
         {
             dhitController.EndTrial();
@@ -1138,37 +1191,23 @@ public class RallyController : MonoBehaviour
         switch (startPhase)
         {
             case PlayPhase.Serve:
-
                 SpawnBallAtSelectedStart();
-
                 break;
-
 
             case PlayPhase.Receive:
-
                 SpawnBallAtSelectedReceiver();
-
                 break;
-
 
             case PlayPhase.Toss:
-
                 SpawnBallAtSetter();
-
                 break;
-
 
             case PlayPhase.Spike:
-
                 SpawnBallAtSelectedTossTarget();
-
                 break;
 
-
             case PlayPhase.Block:
-
                 SpawnBallAtSelectedTossTarget();
-
                 break;
         }
     }
@@ -1773,17 +1812,6 @@ public class RallyController : MonoBehaviour
             return;
         }
 
-        /*
-         * Blockの使用有無はEnd Phaseだけで決める。
-         *
-         * End = Spike
-         *   -> 通常Spike
-         *
-         * End = Block
-         *   -> Spike Contact -> Block Contact -> Block Landing
-         *
-         * 独立したBlock ON/OFF状態は持たない。
-         */
         bool useBlock =
             endPhase ==
             PlayPhase.Block;
@@ -1827,10 +1855,6 @@ public class RallyController : MonoBehaviour
                 $"Block Spin = {blockSpinRpm:F1} rpm"
             );
 
-            /*
-             * End PhaseがBlockなので、FadeもBlock条件として扱う。
-             * blockFadeDelayはSpikeWithBlock開始時点から数える。
-             */
             NotifyPhaseStarted(
                 PlayPhase.Block
             );
@@ -1846,7 +1870,6 @@ public class RallyController : MonoBehaviour
 
             return;
         }
-
 
         Transform spikeTarget =
             GetSelectedSpikeTarget();
@@ -1938,10 +1961,6 @@ public class RallyController : MonoBehaviour
     // Rally JSON Save / Load
     // ============================================================
 
-    /// <summary>
-    /// 現在のRallyControllerの設定を1つのデータへまとめる。
-    /// Transformそのものは保存せず、選択状態・数値・Offsetだけを保存する。
-    /// </summary>
     public RallySettingsData CreateCurrentRallySettings()
     {
         DhitSettings dhitSettingsSnapshot =
@@ -1951,7 +1970,7 @@ public class RallyController : MonoBehaviour
 
         return new RallySettingsData
         {
-            version = 3,
+            version = 5,
 
             startPhaseIndex =
                 (int)startPhase,
@@ -2010,6 +2029,12 @@ public class RallyController : MonoBehaviour
             spikeSpeedKmh =
                 spikeSpeedKmh,
 
+            spikeTargetLeftDistanceOffsetMeters =
+                spikeTargetLeftDistanceOffsetMeters,
+
+            spikeTargetRightDistanceOffsetMeters =
+                spikeTargetRightDistanceOffsetMeters,
+
             spikeTargetLeftOffset =
                 spikeTargetLeftOffset,
 
@@ -2025,11 +2050,21 @@ public class RallyController : MonoBehaviour
             blockSpinRpm =
                 blockSpinRpm,
 
+            blockLandingPointLeftLocalPosition =
+                GetBlockLandingPointLocalPosition(
+                    0
+                ),
+
+            blockLandingPointRightLocalPosition =
+                GetBlockLandingPointLocalPosition(
+                    1
+                ),
+
             blockLandingPointLeftOffset =
-                blockLandingPointLeftOffset,
+                Vector3.zero,
 
             blockLandingPointRightOffset =
-                blockLandingPointRightOffset,
+                Vector3.zero,
 
             tossHeight =
                 tossHeight,
@@ -2083,11 +2118,6 @@ public class RallyController : MonoBehaviour
     }
 
 
-    /// <summary>
-    /// JSONから読み込んだ設定をRallyControllerへ一括反映する。
-    /// 最後にStart Phaseの位置へBallをResetするので、
-    /// そのままStartSelectedSimulation()を呼べば同じRallyを再生できる。
-    /// </summary>
     public void ApplyRallySettings(
         RallySettingsData data,
         bool resetSimulation = true
@@ -2158,10 +2188,6 @@ public class RallyController : MonoBehaviour
                 data.receiveContactFixedFrames
             );
 
-        /*
-         * version 3以降ではSetter PositionもRally条件として復元する。
-         * 旧JSONではVector3.zeroで上書きしない。
-         */
         if (
             data.version >= 3 &&
             setterPosition != null
@@ -2206,11 +2232,34 @@ public class RallyController : MonoBehaviour
                 data.spikeSpeedKmh
             );
 
-        spikeTargetLeftOffset =
-            data.spikeTargetLeftOffset;
+        if (data.version >= 4)
+        {
+            spikeTargetLeftDistanceOffsetMeters =
+                data.spikeTargetLeftDistanceOffsetMeters;
 
-        spikeTargetRightOffset =
-            data.spikeTargetRightOffset;
+            spikeTargetRightDistanceOffsetMeters =
+                data.spikeTargetRightDistanceOffsetMeters;
+
+            spikeTargetLeftOffset =
+                Vector3.zero;
+
+            spikeTargetRightOffset =
+                Vector3.zero;
+        }
+        else
+        {
+            spikeTargetLeftDistanceOffsetMeters =
+                0.0f;
+
+            spikeTargetRightDistanceOffsetMeters =
+                0.0f;
+
+            spikeTargetLeftOffset =
+                data.spikeTargetLeftOffset;
+
+            spikeTargetRightOffset =
+                data.spikeTargetRightOffset;
+        }
 
         blockContactFixedFrames =
             Mathf.Max(
@@ -2227,11 +2276,32 @@ public class RallyController : MonoBehaviour
         blockSpinRpm =
             data.blockSpinRpm;
 
-        blockLandingPointLeftOffset =
-            data.blockLandingPointLeftOffset;
+        if (data.version >= 5)
+        {
+            blockLandingPointLeftOffset =
+                Vector3.zero;
 
-        blockLandingPointRightOffset =
-            data.blockLandingPointRightOffset;
+            blockLandingPointRightOffset =
+                Vector3.zero;
+
+            SetBlockLandingPointLocalPosition(
+                0,
+                data.blockLandingPointLeftLocalPosition
+            );
+
+            SetBlockLandingPointLocalPosition(
+                1,
+                data.blockLandingPointRightLocalPosition
+            );
+        }
+        else
+        {
+            blockLandingPointLeftOffset =
+                data.blockLandingPointLeftOffset;
+
+            blockLandingPointRightOffset =
+                data.blockLandingPointRightOffset;
+        }
 
         tossHeight =
             Mathf.Max(
@@ -2296,11 +2366,6 @@ public class RallyController : MonoBehaviour
                 data.fadeDuration
             );
 
-        /*
-         * version 2以降のRally JSONではDHIT状態も復元する。
-         * version 1 JSONにはhasDhitSettingsが存在しないためfalseとなり、
-         * 現在のShift設定を不用意に0へ上書きしない。
-         */
         if (data.hasDhitSettings)
         {
             if (dhitController != null)
@@ -2330,7 +2395,11 @@ public class RallyController : MonoBehaviour
 
         ApplyAllServeTargetOffsets();
         ApplyAllSpikeTargetOffsets();
-        ApplyAllBlockLandingPointOffsets();
+
+        if (data.version < 5)
+        {
+            ApplyAllBlockLandingPointOffsets();
+        }
 
         ResetExperimentFade();
 
@@ -2341,10 +2410,6 @@ public class RallyController : MonoBehaviour
     }
 
 
-    /// <summary>
-    /// 現在のRally設定をJSONへ保存する。
-    /// Editorではファイル選択ダイアログ、BuildではpersistentDataPathを使う。
-    /// </summary>
     public bool SaveRallyJson()
     {
         string path =
@@ -2363,11 +2428,6 @@ public class RallyController : MonoBehaviour
     }
 
 
-    /// <summary>
-    /// Rally JSONを読み込み、現在設定へ反映する。
-    /// 読込後はStart Phase位置へBallをResetするが、自動再生はしない。
-    /// UIのStart Buttonを押せば保存時と同じRallyを再生できる。
-    /// </summary>
     public bool LoadRallyJson()
     {
         string path =
@@ -2387,10 +2447,6 @@ public class RallyController : MonoBehaviour
     }
 
 
-    /// <summary>
-    /// Rally JSONを読み込み、そのまま再生する。
-    /// 必要ならUI Buttonから直接呼べる。
-    /// </summary>
     public bool LoadRallyJsonAndPlay()
     {
         string path =
@@ -2452,10 +2508,6 @@ public class RallyController : MonoBehaviour
             );
 
 #if UNITY_EDITOR
-            /*
-             * Assets配下へ保存したJSONを
-             * Unity Projectウィンドウへ即時反映する。
-             */
             UnityEditor.AssetDatabase.Refresh();
 #endif
 
@@ -2646,11 +2698,6 @@ public class RallyController : MonoBehaviour
     }
 
 
-    /// <summary>
-    /// Rally JSONの固定保存先を返す。
-    /// EditorではAssets/Experiment/Rallies、
-    /// BuildではpersistentDataPath/Experiment/Ralliesを使用する。
-    /// </summary>
     public string GetRallyJsonDirectory()
     {
         string relativeFolder =
@@ -2709,12 +2756,10 @@ public class RallyController : MonoBehaviour
         string directory
     )
     {
-        if (string.IsNullOrWhiteSpace(
-            path
-        ) ||
-            string.IsNullOrWhiteSpace(
-                directory
-            ))
+        if (
+            string.IsNullOrWhiteSpace(path) ||
+            string.IsNullOrWhiteSpace(directory)
+        )
         {
             return false;
         }
@@ -2755,8 +2800,7 @@ public class RallyController : MonoBehaviour
             StringComparison.OrdinalIgnoreCase
         ))
         {
-            fileName +=
-                ".json";
+            fileName += ".json";
         }
 
         return fileName;
@@ -2826,24 +2870,15 @@ public class RallyController : MonoBehaviour
         switch (targetPosition)
         {
             case ServeTargetPosition.Left:
-
-                serveTargetLeftOffset =
-                    offset;
-
+                serveTargetLeftOffset = offset;
                 break;
 
             case ServeTargetPosition.Center:
-
-                serveTargetCenterOffset =
-                    offset;
-
+                serveTargetCenterOffset = offset;
                 break;
 
             case ServeTargetPosition.Right:
-
-                serveTargetRightOffset =
-                    offset;
-
+                serveTargetRightOffset = offset;
                 break;
         }
 
@@ -2924,6 +2959,8 @@ public class RallyController : MonoBehaviour
 
         selectedTossSide =
             (TossSide)index;
+
+        ApplyAllSpikeTargetOffsets();
     }
 
     public void SetTossTargetZOffset(
@@ -2932,6 +2969,8 @@ public class RallyController : MonoBehaviour
     {
         tossTargetZOffset =
             offset;
+
+        ApplyAllSpikeTargetOffsets();
     }
 
     public void SetSetApexHeight(
@@ -2976,6 +3015,68 @@ public class RallyController : MonoBehaviour
             (SpikeCourse)index;
     }
 
+
+    // ============================================================
+    // Spike Target Distance
+    // ============================================================
+
+    public void SetSpikeTargetDistanceOffset(
+        int index,
+        float distanceMeters
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        if (index == 0)
+        {
+            spikeTargetLeftDistanceOffsetMeters =
+                distanceMeters;
+
+            spikeTargetLeftOffset =
+                Vector3.zero;
+        }
+        else
+        {
+            spikeTargetRightDistanceOffsetMeters =
+                distanceMeters;
+
+            spikeTargetRightOffset =
+                Vector3.zero;
+        }
+
+        ApplySpikeTargetOffset(
+            index
+        );
+    }
+
+
+    public float GetSpikeTargetDistanceOffset(
+        int index
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        return
+            index == 0
+                ? spikeTargetLeftDistanceOffsetMeters
+                : spikeTargetRightDistanceOffsetMeters;
+    }
+
+
+    // ============================================================
+    // Legacy Spike Target XYZ Offset
+    // ============================================================
+
     public void SetSpikeTargetOffset(
         int index,
         Vector3 offset
@@ -2990,11 +3091,17 @@ public class RallyController : MonoBehaviour
 
         if (index == 0)
         {
+            spikeTargetLeftDistanceOffsetMeters =
+                0.0f;
+
             spikeTargetLeftOffset =
                 offset;
         }
         else
         {
+            spikeTargetRightDistanceOffsetMeters =
+                0.0f;
+
             spikeTargetRightOffset =
                 offset;
         }
@@ -3003,6 +3110,7 @@ public class RallyController : MonoBehaviour
             index
         );
     }
+
 
     public Vector3 GetSpikeTargetOffset(
         int index
@@ -3021,8 +3129,15 @@ public class RallyController : MonoBehaviour
                 : spikeTargetRightOffset;
     }
 
+
     public void ResetSpikeTargetOffsets()
     {
+        spikeTargetLeftDistanceOffsetMeters =
+            0.0f;
+
+        spikeTargetRightDistanceOffsetMeters =
+            0.0f;
+
         spikeTargetLeftOffset =
             Vector3.zero;
 
@@ -3032,10 +3147,11 @@ public class RallyController : MonoBehaviour
         ApplyAllSpikeTargetOffsets();
     }
 
-    /// <summary>
-    /// 旧UI互換用。
-    /// Blockの独立状態は持たず、End PhaseをSpike / Blockへ切り替える。
-    /// </summary>
+
+    // ============================================================
+    // Block
+    // ============================================================
+
     public void SetBlockMode(
         int index
     )
@@ -3055,11 +3171,6 @@ public class RallyController : MonoBehaviour
         ValidateSimulationRange();
     }
 
-    /// <summary>
-    /// 旧Toggle互換用。
-    /// true = End Phase Block
-    /// false = End Phase Spike
-    /// </summary>
     public void SetBlockEnabled(
         bool enabled
     )
@@ -3102,6 +3213,83 @@ public class RallyController : MonoBehaviour
             rpm;
     }
 
+
+    // ============================================================
+    // Block Landing Point Local Position
+    // ============================================================
+
+    public void SetBlockLandingPointLocalPosition(
+        int index,
+        Vector3 localPosition
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        Transform target =
+            index == 0
+                ? blockLandingPointLeft
+                : blockLandingPointRight;
+
+        if (target == null)
+        {
+            Debug.LogWarning(
+                "[RallyController] " +
+                $"Block Landing Point {(index == 0 ? "Left" : "Right")} " +
+                "が設定されていません。",
+                this
+            );
+
+            return;
+        }
+
+        target.localPosition =
+            localPosition;
+
+        if (index == 0)
+        {
+            blockLandingPointLeftOffset =
+                Vector3.zero;
+        }
+        else
+        {
+            blockLandingPointRightOffset =
+                Vector3.zero;
+        }
+    }
+
+
+    public Vector3 GetBlockLandingPointLocalPosition(
+        int index
+    )
+    {
+        index =
+            Mathf.Clamp(
+                index,
+                0,
+                1
+            );
+
+        Transform target =
+            index == 0
+                ? blockLandingPointLeft
+                : blockLandingPointRight;
+
+        return
+            target != null
+                ? target.localPosition
+                : Vector3.zero;
+    }
+
+
+    // ============================================================
+    // Legacy Block Landing Point Offset
+    // ============================================================
+
     public void SetBlockLandingPointOffset(
         int index,
         Vector3 offset
@@ -3130,6 +3318,7 @@ public class RallyController : MonoBehaviour
         );
     }
 
+
     public Vector3 GetBlockLandingPointOffset(
         int index
     )
@@ -3147,6 +3336,7 @@ public class RallyController : MonoBehaviour
                 : blockLandingPointRightOffset;
     }
 
+
     public void ResetBlockLandingPointOffsets()
     {
         blockLandingPointLeftOffset =
@@ -3157,6 +3347,11 @@ public class RallyController : MonoBehaviour
 
         ApplyAllBlockLandingPointOffsets();
     }
+
+
+    // ============================================================
+    // Other Parameters
+    // ============================================================
 
     public void SetSpikeSpeed(
         float speedKmh
@@ -3679,7 +3874,7 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
-    // Spike Target Offset
+    // Spike Target
     // ============================================================
 
     private void CacheSpikeTargetBasePositions()
@@ -3727,23 +3922,108 @@ public class RallyController : MonoBehaviour
                 1
             );
 
-        if (index == 0)
+        Transform spikeTarget =
+            index == 0
+                ? spikeTargetLeft
+                : spikeTargetRight;
+
+        if (spikeTarget == null)
         {
-            if (spikeTargetLeft != null)
-            {
-                spikeTargetLeft.localPosition =
-                    spikeTargetLeftBaseLocalPosition +
-                    spikeTargetLeftOffset;
-            }
+            return;
+        }
+
+        Vector3 baseLocalPosition =
+            index == 0
+                ? spikeTargetLeftBaseLocalPosition
+                : spikeTargetRightBaseLocalPosition;
+
+        Vector3 legacyLocalOffset =
+            index == 0
+                ? spikeTargetLeftOffset
+                : spikeTargetRightOffset;
+
+        float distanceOffsetMeters =
+            index == 0
+                ? spikeTargetLeftDistanceOffsetMeters
+                : spikeTargetRightDistanceOffsetMeters;
+
+        Vector3 baseWithLegacyLocalPosition =
+            baseLocalPosition +
+            legacyLocalOffset;
+
+        Transform parent =
+            spikeTarget.parent;
+
+        Vector3 baseWorldPosition =
+            parent != null
+                ? parent.TransformPoint(
+                    baseWithLegacyLocalPosition
+                )
+                : baseWithLegacyLocalPosition;
+
+        if (
+            Mathf.Abs(
+                distanceOffsetMeters
+            ) <= 0.000001f
+        )
+        {
+            spikeTarget.localPosition =
+                baseWithLegacyLocalPosition;
 
             return;
         }
 
-        if (spikeTargetRight != null)
+        Vector3 spikeContactWorldPosition =
+            GetSelectedTossTargetPosition();
+
+        Vector3 trajectoryDirection =
+            baseWorldPosition -
+            spikeContactWorldPosition;
+
+        trajectoryDirection.y =
+            0.0f;
+
+        if (
+            trajectoryDirection.sqrMagnitude <=
+            0.000001f
+        )
         {
-            spikeTargetRight.localPosition =
-                spikeTargetRightBaseLocalPosition +
-                spikeTargetRightOffset;
+            Debug.LogWarning(
+                "[RallyController] " +
+                "Spike Target Distance Offsetの方向を計算できません。\n" +
+                $"Target Index = {index}\n" +
+                $"Spike Contact = {spikeContactWorldPosition}\n" +
+                $"Base Target = {baseWorldPosition}",
+                this
+            );
+
+            spikeTarget.localPosition =
+                baseWithLegacyLocalPosition;
+
+            return;
+        }
+
+        trajectoryDirection.Normalize();
+
+        Vector3 finalWorldPosition =
+            baseWorldPosition +
+            trajectoryDirection *
+            distanceOffsetMeters;
+
+        finalWorldPosition.y =
+            baseWorldPosition.y;
+
+        if (parent != null)
+        {
+            spikeTarget.localPosition =
+                parent.InverseTransformPoint(
+                    finalWorldPosition
+                );
+        }
+        else
+        {
+            spikeTarget.position =
+                finalWorldPosition;
         }
     }
 
@@ -3775,7 +4055,7 @@ public class RallyController : MonoBehaviour
 
 
     // ============================================================
-    // Block Landing Point Offset
+    // Legacy Block Landing Point Offset
     // ============================================================
 
     private void CacheBlockLandingPointBasePositions()

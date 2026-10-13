@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 /// <summary>
@@ -13,7 +14,7 @@ using UnityEngine.UI;
 /// - Block Spinの変更
 /// - Block Exit Speedの変更
 /// - Block用Fade Delayの変更
-/// - Left / Right のBlock Landing PointへXYZ Offsetを付与
+/// - Left / Right のBlock Landing PointのLocal Position XYZを直接変更
 /// - Block設定のJSON Save / Load
 /// - Main Panel <-> Block Panel の切り替え
 ///
@@ -80,23 +81,30 @@ public class BlockUIController : MonoBehaviour
 
 
     // ============================================================
-    // Block Landing Point Offset
+    // Block Landing Point Local Position
     // ============================================================
 
-    [Header("Block Landing Point Offset")]
+    [Header("Block Landing Point Position")]
 
-    [Tooltip("Offsetを適用するBlock Landing Point: Left / Right")]
+    [Tooltip("座標を編集するBlock Landing Point: Left / Right")]
+    [FormerlySerializedAs("offsetTargetDropdown")]
     [SerializeField]
-    private TMP_Dropdown offsetTargetDropdown;
+    private TMP_Dropdown positionTargetDropdown;
 
+    [Tooltip("Block Landing Point Local X [m]")]
+    [FormerlySerializedAs("offsetXInputField")]
     [SerializeField]
-    private TMP_InputField offsetXInputField;
+    private TMP_InputField positionXInputField;
 
+    [Tooltip("Block Landing Point Local Y [m]")]
+    [FormerlySerializedAs("offsetYInputField")]
     [SerializeField]
-    private TMP_InputField offsetYInputField;
+    private TMP_InputField positionYInputField;
 
+    [Tooltip("Block Landing Point Local Z [m]")]
+    [FormerlySerializedAs("offsetZInputField")]
     [SerializeField]
-    private TMP_InputField offsetZInputField;
+    private TMP_InputField positionZInputField;
 
 
     // ============================================================
@@ -124,7 +132,7 @@ public class BlockUIController : MonoBehaviour
     // Runtime
     // ============================================================
 
-    private int currentOffsetTargetIndex =
+    private int currentPositionTargetIndex =
         0;
 
     private bool isSynchronizing =
@@ -138,14 +146,22 @@ public class BlockUIController : MonoBehaviour
     [Serializable]
     private class BlockSettingsData
     {
-        public int version = 1;
+        public int version = 2;
 
         public float blockSpinRpm;
         public float speedKmh;
         public float fadeDelaySeconds;
 
+        // 旧JSONとのフィールド名互換のため名前はそのまま。
         public int offsetTargetIndex;
 
+        // version 2以降:
+        // Block Landing PointのLocal Positionそのもの。
+        public Vector3 leftLandingPointLocalPosition;
+        public Vector3 rightLandingPointLocalPosition;
+
+        // version 1互換用:
+        // 旧方式のBase + Offset。
         public Vector3 leftLandingPointOffset;
         public Vector3 rightLandingPointOffset;
     }
@@ -174,10 +190,10 @@ public class BlockUIController : MonoBehaviour
         ConfigureInputFields();
         BindUI();
 
-        currentOffsetTargetIndex =
-            offsetTargetDropdown != null
+        currentPositionTargetIndex =
+            positionTargetDropdown != null
                 ? Mathf.Clamp(
-                    offsetTargetDropdown.value,
+                    positionTargetDropdown.value,
                     0,
                     1
                 )
@@ -247,7 +263,7 @@ public class BlockUIController : MonoBehaviour
     private void ConfigureDropdowns()
     {
         ConfigureDropdown(
-            offsetTargetDropdown,
+            positionTargetDropdown,
             new List<string>
             {
                 "Left",
@@ -292,15 +308,15 @@ public class BlockUIController : MonoBehaviour
         );
 
         ConfigureDecimalInput(
-            offsetXInputField
+            positionXInputField
         );
 
         ConfigureDecimalInput(
-            offsetYInputField
+            positionYInputField
         );
 
         ConfigureDecimalInput(
-            offsetZInputField
+            positionZInputField
         );
     }
 
@@ -352,10 +368,10 @@ public class BlockUIController : MonoBehaviour
             );
         }
 
-        if (offsetTargetDropdown != null)
+        if (positionTargetDropdown != null)
         {
-            offsetTargetDropdown.onValueChanged.AddListener(
-                OnOffsetTargetChanged
+            positionTargetDropdown.onValueChanged.AddListener(
+                OnPositionTargetChanged
             );
         }
 
@@ -375,18 +391,18 @@ public class BlockUIController : MonoBehaviour
         );
 
         BindInputField(
-            offsetXInputField,
-            OnOffsetEndEdit
+            positionXInputField,
+            OnPositionEndEdit
         );
 
         BindInputField(
-            offsetYInputField,
-            OnOffsetEndEdit
+            positionYInputField,
+            OnPositionEndEdit
         );
 
         BindInputField(
-            offsetZInputField,
-            OnOffsetEndEdit
+            positionZInputField,
+            OnPositionEndEdit
         );
     }
 
@@ -420,10 +436,10 @@ public class BlockUIController : MonoBehaviour
             );
         }
 
-        if (offsetTargetDropdown != null)
+        if (positionTargetDropdown != null)
         {
-            offsetTargetDropdown.onValueChanged.RemoveListener(
-                OnOffsetTargetChanged
+            positionTargetDropdown.onValueChanged.RemoveListener(
+                OnPositionTargetChanged
             );
         }
 
@@ -443,18 +459,18 @@ public class BlockUIController : MonoBehaviour
         );
 
         UnbindInputField(
-            offsetXInputField,
-            OnOffsetEndEdit
+            positionXInputField,
+            OnPositionEndEdit
         );
 
         UnbindInputField(
-            offsetYInputField,
-            OnOffsetEndEdit
+            positionYInputField,
+            OnPositionEndEdit
         );
 
         UnbindInputField(
-            offsetZInputField,
-            OnOffsetEndEdit
+            positionZInputField,
+            OnPositionEndEdit
         );
     }
 
@@ -493,7 +509,7 @@ public class BlockUIController : MonoBehaviour
     // Dropdown Events
     // ============================================================
 
-    private void OnOffsetTargetChanged(
+    private void OnPositionTargetChanged(
         int index
     )
     {
@@ -502,14 +518,14 @@ public class BlockUIController : MonoBehaviour
             return;
         }
 
-        currentOffsetTargetIndex =
+        currentPositionTargetIndex =
             Mathf.Clamp(
                 index,
                 0,
                 1
             );
 
-        RefreshOffsetFields();
+        RefreshPositionFields();
     }
 
 
@@ -579,35 +595,35 @@ public class BlockUIController : MonoBehaviour
 
 
     // ============================================================
-    // Landing Point Offset Events
+    // Landing Point Position Events
     // ============================================================
 
-    private void OnOffsetEndEdit(
+    private void OnPositionEndEdit(
         string unused
     )
     {
-        ApplyOffsetFields();
-        RefreshOffsetFields();
+        ApplyPositionFields();
+        RefreshPositionFields();
     }
 
-    private void ApplyOffsetFields()
+    private void ApplyPositionFields()
     {
         if (
             !TryParseFloat(
-                offsetXInputField != null
-                    ? offsetXInputField.text
+                positionXInputField != null
+                    ? positionXInputField.text
                     : string.Empty,
                 out float x
             ) ||
             !TryParseFloat(
-                offsetYInputField != null
-                    ? offsetYInputField.text
+                positionYInputField != null
+                    ? positionYInputField.text
                     : string.Empty,
                 out float y
             ) ||
             !TryParseFloat(
-                offsetZInputField != null
-                    ? offsetZInputField.text
+                positionZInputField != null
+                    ? positionZInputField.text
                     : string.Empty,
                 out float z
             )
@@ -616,8 +632,8 @@ public class BlockUIController : MonoBehaviour
             return;
         }
 
-        rallyController.SetBlockLandingPointOffset(
-            currentOffsetTargetIndex,
+        rallyController.SetBlockLandingPointLocalPosition(
+            currentPositionTargetIndex,
             new Vector3(
                 x,
                 y,
@@ -653,7 +669,7 @@ public class BlockUIController : MonoBehaviour
             rallyController.SetBlockFadeDelay
         );
 
-        ApplyOffsetFields();
+        ApplyPositionFields();
     }
 
     private static void ApplyFloatIfValid(
@@ -697,10 +713,10 @@ public class BlockUIController : MonoBehaviour
 
         try
         {
-            if (offsetTargetDropdown != null)
+            if (positionTargetDropdown != null)
             {
-                offsetTargetDropdown.SetValueWithoutNotify(
-                    currentOffsetTargetIndex
+                positionTargetDropdown.SetValueWithoutNotify(
+                    currentPositionTargetIndex
                 );
             }
 
@@ -725,34 +741,34 @@ public class BlockUIController : MonoBehaviour
                 false;
         }
 
-        RefreshOffsetFields();
+        RefreshPositionFields();
     }
 
-    private void RefreshOffsetFields()
+    private void RefreshPositionFields()
     {
         if (rallyController == null)
         {
             return;
         }
 
-        Vector3 offset =
-            rallyController.GetBlockLandingPointOffset(
-                currentOffsetTargetIndex
+        Vector3 localPosition =
+            rallyController.GetBlockLandingPointLocalPosition(
+                currentPositionTargetIndex
             );
 
         SetInputFieldValue(
-            offsetXInputField,
-            offset.x
+            positionXInputField,
+            localPosition.x
         );
 
         SetInputFieldValue(
-            offsetYInputField,
-            offset.y
+            positionYInputField,
+            localPosition.y
         );
 
         SetInputFieldValue(
-            offsetZInputField,
-            offset.z
+            positionZInputField,
+            localPosition.z
         );
     }
 
@@ -938,7 +954,7 @@ public class BlockUIController : MonoBehaviour
     {
         return new BlockSettingsData
         {
-            version = 1,
+            version = 2,
 
             blockSpinRpm =
                 rallyController.BlockSpinRpm,
@@ -950,17 +966,25 @@ public class BlockUIController : MonoBehaviour
                 rallyController.BlockFadeDelay,
 
             offsetTargetIndex =
-                currentOffsetTargetIndex,
+                currentPositionTargetIndex,
 
-            leftLandingPointOffset =
-                rallyController.GetBlockLandingPointOffset(
+            leftLandingPointLocalPosition =
+                rallyController.GetBlockLandingPointLocalPosition(
                     0
                 ),
 
-            rightLandingPointOffset =
-                rallyController.GetBlockLandingPointOffset(
+            rightLandingPointLocalPosition =
+                rallyController.GetBlockLandingPointLocalPosition(
                     1
-                )
+                ),
+
+            // version 1互換フィールド。
+            // version 2ではLocal Positionを正とするためzeroで保存する。
+            leftLandingPointOffset =
+                Vector3.zero,
+
+            rightLandingPointOffset =
+                Vector3.zero
         };
     }
 
@@ -980,17 +1004,36 @@ public class BlockUIController : MonoBehaviour
             data.fadeDelaySeconds
         );
 
-        rallyController.SetBlockLandingPointOffset(
-            0,
-            data.leftLandingPointOffset
-        );
+        if (data.version >= 2)
+        {
+            rallyController.SetBlockLandingPointLocalPosition(
+                0,
+                data.leftLandingPointLocalPosition
+            );
 
-        rallyController.SetBlockLandingPointOffset(
-            1,
-            data.rightLandingPointOffset
-        );
+            rallyController.SetBlockLandingPointLocalPosition(
+                1,
+                data.rightLandingPointLocalPosition
+            );
+        }
+        else
+        {
+            /*
+             * 旧version 1 JSONはXYZ Offsetだったため、
+             * Legacy APIへ渡して元の挙動を再現する。
+             */
+            rallyController.SetBlockLandingPointOffset(
+                0,
+                data.leftLandingPointOffset
+            );
 
-        currentOffsetTargetIndex =
+            rallyController.SetBlockLandingPointOffset(
+                1,
+                data.rightLandingPointOffset
+            );
+        }
+
+        currentPositionTargetIndex =
             Mathf.Clamp(
                 data.offsetTargetIndex,
                 0,
