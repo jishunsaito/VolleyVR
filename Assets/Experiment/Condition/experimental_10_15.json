@@ -1,0 +1,13 @@
+{
+    "formatVersion": 1,
+    "savedAt": "2026-10-15 14:38:45",
+    "shiftPixels": 56.23294448852539,
+    "focalLength": 60.0,
+    "baseline": 1300.0,
+    "stereoCameraPosition": {
+        "x": 0.0,
+        "y": 14.050000190734864,
+        "z": -39.7599983215332
+    },
+    "stereoCameraRotationX": 16.989999771118165
+}

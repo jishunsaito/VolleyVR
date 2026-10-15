@@ -32,6 +32,7 @@ public class DhitSettings
     [Tooltip("Startup Boostを継続する時間 [s]")]
     public float startupBoostDurationSec = 0.25f;
 
+
     // =========================================================
     // Legacy fields
     // =========================================================
@@ -56,6 +57,7 @@ public class DhitSettings
     [HideInInspector]
     public float filterTimeConstantSec = 0.05f;
 }
+
 
 
 public class DHITController : MonoBehaviour
@@ -105,6 +107,10 @@ public class DHITController : MonoBehaviour
         20.0f;
 
 
+    // =========================================================
+    // Tracking Speed
+    // =========================================================
+
     [Header("Tracking Speed")]
 
     [Tooltip(
@@ -146,9 +152,10 @@ public class DHITController : MonoBehaviour
     [Header("Static HIT")]
 
     [Tooltip(
-        "DHIT OFF時のStatic shiftPixels。\n" +
-        "Dynamic開始時の初期位置にもなります。\n" +
-        "UIControllerのShiftから変更できます。"
+        "現在のBase Shift [px]。\n" +
+        "通常はNet Centerのraw disparity / 2から自動計算されます。\n" +
+        "Static時はNet Centerを0 disparityに固定し、\n" +
+        "Dynamic時はこの位置を初期値としてPole-based DHITを開始します。"
     )]
     [SerializeField]
     private float baseShiftPixels =
@@ -156,9 +163,9 @@ public class DHITController : MonoBehaviour
 
 
     [Tooltip(
-        "ONの場合のみ、Awake時にImageControllerの現在Shiftを" +
-        "Base Shiftの初期値として取り込みます。\n" +
-        "通常はOFFにして、DHITController / UI側のBase Shiftを正とします。"
+        "旧Scene / 旧設定との互換用。\n" +
+        "ONの場合はAwake時にImageControllerの現在ShiftをFallbackとして取り込みます。\n" +
+        "実際のBase Shiftは最初のLateUpdateでNet Center ZDPへ自動更新されます。"
     )]
     [SerializeField]
     private bool initializeBaseShiftFromImageControllerOnAwake =
@@ -220,14 +227,28 @@ public class DHITController : MonoBehaviour
     private bool startupBoostTriggered =
         false;
 
+
     private float startupBoostRemainingSec =
         0.0f;
+
+
+    /*
+     * Dynamic Trial開始時に、
+     * BallDisparityCalculatorがそのFrameで計算した
+     * 最新のNet Center視差を使ってBase Shiftを確定するためのFlag。
+     *
+     * BeginTrial / SetDynamicEnabled / JSON Loadなどでtrueにし、
+     * LateUpdateで一度だけNet Centerへ再同期した後falseにする。
+     */
+    private bool needsNetCenterInitialization =
+        true;
 
 
     // 旧DHITの公開Debug値との互換用。
     // Pole制御には使用しない。
     private bool disparityInitializedForDebug =
         false;
+
 
     private float previousBallDisparityPxForDebug =
         0.0f;
@@ -357,8 +378,6 @@ public class DHITController : MonoBehaviour
     // =========================================================
     // Legacy Debug Properties
     // =========================================================
-    // 現在の他スクリプトが参照していても壊れないように残す。
-    // Pole基準の制御入力ではない。
 
     public float CurrentBallDisparityPx
     {
@@ -381,9 +400,6 @@ public class DHITController : MonoBehaviour
     }
 
 
-    /// <summary>
-    /// 現在Shiftが実際に変化している速度の符号付き値 [px/s]。
-    /// </summary>
     public float CurrentDhitVelocityPxPerSec
     {
         get;
@@ -392,8 +408,38 @@ public class DHITController : MonoBehaviour
 
 
     // =========================================================
-    // Pole Target Shifts
+    // ZDP Target Shifts
     // =========================================================
+
+    /// <summary>
+    /// Net CenterをZDP (= shifted disparity 0) にするShift [px]。
+    ///
+    /// shiftedDisparity
+    /// = rawDisparity - 2 * shiftPixels
+    ///
+    /// よってZDP条件では
+    /// shiftPixels = rawDisparity / 2。
+    /// </summary>
+    public float NetCenterTargetShiftPixels
+    {
+        get
+        {
+            if (
+                ballDisparityCalculator == null ||
+                !ballDisparityCalculator.HasNetCenter
+            )
+            {
+                return 0.0f;
+            }
+
+
+            return
+                ballDisparityCalculator
+                    .NetCenterDisparityPixels *
+                0.5f;
+        }
+    }
+
 
     public float NearPoleTargetShiftPixels
     {
@@ -505,6 +551,16 @@ public class DHITController : MonoBehaviour
         ResetInternalState();
 
 
+        /*
+         * Awake時点ではBallDisparityCalculatorのUpdate()が
+         * まだ走っていない可能性がある。
+         * そのため現在値はFallbackとして適用し、
+         * 最初のLateUpdateで必ずNet Centerへ同期する。
+         */
+        needsNetCenterInitialization =
+            true;
+
+
         currentShiftPixels =
             baseShiftPixels;
 
@@ -519,7 +575,14 @@ public class DHITController : MonoBehaviour
 
     /// <summary>
     /// BallDisparityCalculatorはUpdate()で計算するので、
-    /// DHITControllerはLateUpdate()で結果を使用する。
+    /// DHITControllerはLateUpdate()でそのFrameの最新結果を使用する。
+    ///
+    /// Static:
+    /// Net Centerを常にZDP (= 0 disparity) に固定する。
+    ///
+    /// Dynamic:
+    /// Trial開始時だけNet CenterをZDPにして、
+    /// そこから従来のPole-based DHITを行う。
     /// </summary>
     private void LateUpdate()
     {
@@ -537,16 +600,32 @@ public class DHITController : MonoBehaviour
 
         // =====================================================
         // Static condition
+        //
+        // Net Centerを常に0 disparityへ固定する。
+        // Camera / Baseline / Focal Lengthなどが変わっても、
+        // そのFrameのNet Center raw disparityからBaseを再計算する。
         // =====================================================
 
         if (!dhitEnabled)
         {
-            currentShiftPixels =
-                baseShiftPixels;
+            if (!ApplyNetCenterAsBaseShift())
+            {
+                /*
+                 * Net Center情報がまだ無い場合だけ、
+                 * 現在のBase ShiftをFallbackとして維持する。
+                 */
+                currentShiftPixels =
+                    baseShiftPixels;
 
 
-            targetShiftPixels =
-                baseShiftPixels;
+                targetShiftPixels =
+                    baseShiftPixels;
+
+
+                ApplyCurrentShift();
+
+                return;
+            }
 
 
             currentTargetPole =
@@ -555,6 +634,18 @@ public class DHITController : MonoBehaviour
 
             depthInitialized =
                 false;
+
+
+            startupBoostTriggered =
+                false;
+
+
+            startupBoostRemainingSec =
+                0.0f;
+
+
+            CurrentTrackingSpeedMultiplier =
+                1.0f;
 
 
             CurrentDepthVelocityMps =
@@ -577,7 +668,48 @@ public class DHITController : MonoBehaviour
                 0.0f;
 
 
+            needsNetCenterInitialization =
+                true;
+
+
+            return;
+        }
+
+
+        // =====================================================
+        // Dynamic condition - Initial Net Center calibration
+        //
+        // BeginTrial()等が呼ばれた後、
+        // 最初のLateUpdateでNet CenterをZDPにする。
+        // このFrameではDHIT追従を開始せず、
+        // 必ずNet Center位置から次Frame以降のDHITを開始する。
+        // =====================================================
+
+        if (needsNetCenterInitialization)
+        {
+            if (!ApplyNetCenterAsBaseShift())
+            {
+                return;
+            }
+
+
+            ResetInternalState();
+
+
+            currentShiftPixels =
+                baseShiftPixels;
+
+
+            targetShiftPixels =
+                baseShiftPixels;
+
+
             ApplyCurrentShift();
+
+
+            needsNetCenterInitialization =
+                false;
+
 
             return;
         }
@@ -661,13 +793,28 @@ public class DHITController : MonoBehaviour
     /// <summary>
     /// 現在のStatic / Dynamic状態を維持したままTrialを開始する。
     ///
-    /// Base ShiftはUI / DHITController Inspectorの値を正とする。
-    /// ImageController側はFinal Shiftなので、
-    /// Trial開始時にそこからBaseへ逆コピーしない。
+    /// Static:
+    /// LateUpdateでNet Centerを常に0 disparityへ固定する。
+    ///
+    /// Dynamic:
+    /// Trial開始時のBase ShiftをNet Center ZDPへ戻し、
+    /// 最初のLateUpdateでそのFrameの最新Net Center視差へ再同期してから
+    /// Pole-based DHITを開始する。
     /// </summary>
     public void BeginTrial()
     {
         ResetInternalState();
+
+
+        /*
+         * まず現在キャッシュされているNet Center値で即時に合わせる。
+         * そのうえでLateUpdateでもう一度最新値へ同期する。
+         */
+        ApplyNetCenterAsBaseShift();
+
+
+        needsNetCenterInitialization =
+            true;
 
 
         currentShiftPixels =
@@ -725,6 +872,17 @@ public class DHITController : MonoBehaviour
         ResetInternalState();
 
 
+        /*
+         * Reset / Trial終了時もNet Center ZDPへ戻す。
+         * 次のLateUpdateでも最新値へ再同期する。
+         */
+        ApplyNetCenterAsBaseShift();
+
+
+        needsNetCenterInitialization =
+            true;
+
+
         currentShiftPixels =
             baseShiftPixels;
 
@@ -761,6 +919,18 @@ public class DHITController : MonoBehaviour
         ResetInternalState();
 
 
+        /*
+         * Static / Dynamic切替時にも基準をNet Centerへ戻す。
+         * Dynamicへ切り替えた場合は、最初のLateUpdateで
+         * 最新のNet Center値へ再同期した後にDHITを開始する。
+         */
+        ApplyNetCenterAsBaseShift();
+
+
+        needsNetCenterInitialization =
+            true;
+
+
         currentShiftPixels =
             baseShiftPixels;
 
@@ -781,6 +951,57 @@ public class DHITController : MonoBehaviour
         SetDynamicEnabled(
             enabled
         );
+    }
+
+
+    // =========================================================
+    // Net Center Base Shift
+    // =========================================================
+
+    /// <summary>
+    /// 現在BallDisparityCalculatorが保持しているNet Centerの
+    /// raw disparityからBase Shiftを求める。
+    ///
+    /// shiftedDisparity
+    /// = rawDisparity - 2 * shiftPixels
+    ///
+    /// Net Centerを0 disparityにするため、
+    ///
+    /// baseShiftPixels
+    /// = NetCenterDisparityPixels / 2
+    ///
+    /// とする。
+    ///
+    /// BallDisparityCalculator自体は変更せず、
+    /// 既に計算済みの値を参照するだけ。
+    /// </summary>
+    private bool ApplyNetCenterAsBaseShift()
+    {
+        if (
+            ballDisparityCalculator == null ||
+            !ballDisparityCalculator.HasNetCenter
+        )
+        {
+            return false;
+        }
+
+
+        baseShiftPixels =
+            NetCenterTargetShiftPixels;
+
+
+        currentShiftPixels =
+            baseShiftPixels;
+
+
+        targetShiftPixels =
+            baseShiftPixels;
+
+
+        ApplyCurrentShift();
+
+
+        return true;
     }
 
 
@@ -912,6 +1133,14 @@ public class DHITController : MonoBehaviour
 
 
         ResetInternalState();
+
+
+        /*
+         * JSONに保存されていたBase Shiftは互換性のため一度読み込むが、
+         * 実際の表示基準は次のLateUpdateでNet Center ZDPへ再計算する。
+         */
+        needsNetCenterInitialization =
+            true;
 
 
         currentShiftPixels =
@@ -1330,10 +1559,14 @@ public class DHITController : MonoBehaviour
         }
 
 
-        if (startupBoostRemainingSec <= 0.0f)
+        if (
+            startupBoostRemainingSec <=
+            0.0f
+        )
         {
             startupBoostRemainingSec =
                 0.0f;
+
 
             return;
         }
@@ -1342,7 +1575,8 @@ public class DHITController : MonoBehaviour
         startupBoostRemainingSec =
             Mathf.Max(
                 0.0f,
-                startupBoostRemainingSec - dt
+                startupBoostRemainingSec -
+                dt
             );
     }
 
@@ -1605,7 +1839,8 @@ public class DHITController : MonoBehaviour
             Mathf.MoveTowards(
                 currentShiftPixels,
                 targetShiftPixels,
-                shiftVelocity * dt
+                shiftVelocity *
+                dt
             );
     }
 

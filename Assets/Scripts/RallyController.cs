@@ -5,28 +5,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-/// <summary>
-/// ラリー全体の進行を管理する。
-///
-/// Phase:
-/// Serve
-/// ↓
-/// Receive
-/// ↓
-/// Toss
-/// ↓
-/// Spike
-/// ↓
-/// Block (End Phase = Block のときのみ)
-///
-/// Toss Target:
-/// LeftTossTarget / RightTossTarget
-///
-/// 選択したTossTargetが
-/// Setter Tossの到達点
-/// = Spike Contact Point
-/// になる。
-/// </summary>
 public class RallyController : MonoBehaviour
 {
     // ============================================================
@@ -53,8 +31,6 @@ public class RallyController : MonoBehaviour
         public float receiveBackspinRpm;
         public int receiveContactFixedFrames;
 
-        // version 3以降:
-        // Setter PositionのLocal Positionを保存する。
         public Vector3 setterLocalPosition;
 
         public int tossSideIndex;
@@ -66,14 +42,9 @@ public class RallyController : MonoBehaviour
         public int spikeCourseIndex;
         public float spikeSpeedKmh;
 
-        // version 4以降:
-        // Spike Contact -> 基準Spike TargetのXZ方向へ
-        // 何m延長/短縮するかを符号付き距離Rとして保存する。
         public float spikeTargetLeftDistanceOffsetMeters;
         public float spikeTargetRightDistanceOffsetMeters;
 
-        // version 3以前との互換用。
-        // 新しいDistance R方式では通常Vector3.zero。
         public Vector3 spikeTargetLeftOffset;
         public Vector3 spikeTargetRightOffset;
 
@@ -81,13 +52,9 @@ public class RallyController : MonoBehaviour
         public float blockExitSpeedKmh;
         public float blockSpinRpm;
 
-        // version 5以降:
-        // Block Landing PointのLocal Positionそのものを保存する。
         public Vector3 blockLandingPointLeftLocalPosition;
         public Vector3 blockLandingPointRightLocalPosition;
 
-        // version 4以前との互換用。
-        // 旧方式では「起動時の基準Local Position + Offset」だった。
         public Vector3 blockLandingPointLeftOffset;
         public Vector3 blockLandingPointRightOffset;
 
@@ -105,9 +72,6 @@ public class RallyController : MonoBehaviour
         public float blockFadeDelay;
         public float fadeDuration;
 
-        // DHIT / Static-Base Shift
-        // version 2以降で保存。旧version 1 JSONではfalseのままなので、
-        // Load時に現在のDHIT設定を上書きしない。
         public bool hasDhitSettings;
         public float baseShiftPixels;
         public bool dynamicShiftEnabled;
@@ -115,7 +79,7 @@ public class RallyController : MonoBehaviour
     }
 
     // ============================================================
-    // Play Phase
+    // Enums
     // ============================================================
 
     public enum PlayPhase
@@ -127,46 +91,11 @@ public class RallyController : MonoBehaviour
         Block = 4
     }
 
-    [Header("Simulation Range")]
-
-    [Tooltip("シミュレーション開始Phase")]
-    [SerializeField]
-    private PlayPhase startPhase =
-        PlayPhase.Serve;
-
-    [Tooltip("シミュレーション終了Phase")]
-    [SerializeField]
-    private PlayPhase endPhase =
-        PlayPhase.Receive;
-
-
-    // ============================================================
-    // Court Side
-    // ============================================================
-
     public enum CourtSide
     {
         Left = 0,
         Right = 1
     }
-
-    [Header("Court Side")]
-
-    [Tooltip(
-        "プレー関係のオブジェクトをまとめた親Transform。" +
-        "コート中央をPivotにしてください。"
-    )]
-    [SerializeField]
-    private Transform playRoot;
-
-    [SerializeField]
-    private CourtSide currentCourtSide =
-        CourtSide.Left;
-
-
-    // ============================================================
-    // Serve Start
-    // ============================================================
 
     public enum ServeStartPosition
     {
@@ -175,11 +104,6 @@ public class RallyController : MonoBehaviour
         Right = 2
     }
 
-
-    // ============================================================
-    // Serve Target
-    // ============================================================
-
     public enum ServeTargetPosition
     {
         Left = 0,
@@ -187,21 +111,11 @@ public class RallyController : MonoBehaviour
         Right = 2
     }
 
-
-    // ============================================================
-    // Toss Side
-    // ============================================================
-
     public enum TossSide
     {
         Left = 0,
         Right = 1
     }
-
-
-    // ============================================================
-    // Spike Course
-    // ============================================================
 
     public enum SpikeCourse
     {
@@ -209,695 +123,294 @@ public class RallyController : MonoBehaviour
         Cross = 1
     }
 
-
-    // ============================================================
-    // Block Mode (Legacy Compatibility)
-    // ============================================================
-
-    /// <summary>
-    /// 旧UI / 既存コードとの互換用。
-    /// 現在は独立したBlock状態を保持せず、
-    /// End Phase == Block かどうかから導出する。
-    /// </summary>
     public enum BlockMode
     {
         None = 0,
         Block = 1
     }
 
+    // ============================================================
+    // Simulation Range
+    // ============================================================
+
+    [Header("Simulation Range")]
+    [SerializeField] private PlayPhase startPhase = PlayPhase.Serve;
+    [SerializeField] private PlayPhase endPhase = PlayPhase.Receive;
+
+    // ============================================================
+    // Court
+    // ============================================================
+
+    [Header("Court Side")]
+    [SerializeField] private Transform playRoot;
+    [SerializeField] private CourtSide currentCourtSide = CourtSide.Left;
 
     // ============================================================
     // Ball Spawner
     // ============================================================
 
     [Header("Ball Spawner")]
-
-    [SerializeField]
-    private BallSpawner ballSpawner;
-
+    [SerializeField] private BallSpawner ballSpawner;
 
     // ============================================================
-    // Serve Start Points
+    // Serve Start
     // ============================================================
 
     [Header("Serve Start Points")]
-
-    [SerializeField]
-    private Transform serveStartLeft;
-
-    [SerializeField]
-    private Transform serveStartCenter;
-
-    [SerializeField]
-    private Transform serveStartRight;
+    [SerializeField] private Transform serveStartLeft;
+    [SerializeField] private Transform serveStartCenter;
+    [SerializeField] private Transform serveStartRight;
 
     [Header("Selected Serve Start")]
-
-    [SerializeField]
-    private ServeStartPosition selectedServeStart =
+    [SerializeField] private ServeStartPosition selectedServeStart =
         ServeStartPosition.Center;
 
-
     // ============================================================
-    // Receiver / Serve Target
+    // Serve Target
     // ============================================================
 
     [Header("Serve Target - Receiver Transforms")]
-
-    [SerializeField]
-    private Transform serveTargetLeft;
-
-    [SerializeField]
-    private Transform serveTargetCenter;
-
-    [SerializeField]
-    private Transform serveTargetRight;
+    [SerializeField] private Transform serveTargetLeft;
+    [SerializeField] private Transform serveTargetCenter;
+    [SerializeField] private Transform serveTargetRight;
 
     [Header("Selected Serve Target")]
-
-    [SerializeField]
-    private ServeTargetPosition selectedServeTarget =
+    [SerializeField] private ServeTargetPosition selectedServeTarget =
         ServeTargetPosition.Center;
 
-
-    // ============================================================
-    // Serve Target Offset
-    // ============================================================
-
     [Header("Serve Target Offset")]
-
-    [Tooltip("Serve Target Left の基準位置からのLocal Offset [m]")]
-    [SerializeField]
-    private Vector3 serveTargetLeftOffset =
-        Vector3.zero;
-
-    [Tooltip("Serve Target Center の基準位置からのLocal Offset [m]")]
-    [SerializeField]
-    private Vector3 serveTargetCenterOffset =
-        Vector3.zero;
-
-    [Tooltip("Serve Target Right の基準位置からのLocal Offset [m]")]
-    [SerializeField]
-    private Vector3 serveTargetRightOffset =
-        Vector3.zero;
+    [SerializeField] private Vector3 serveTargetLeftOffset = Vector3.zero;
+    [SerializeField] private Vector3 serveTargetCenterOffset = Vector3.zero;
+    [SerializeField] private Vector3 serveTargetRightOffset = Vector3.zero;
 
     private Vector3 serveTargetLeftBaseLocalPosition;
     private Vector3 serveTargetCenterBaseLocalPosition;
     private Vector3 serveTargetRightBaseLocalPosition;
-
-    private bool serveTargetBasePositionsCached =
-        false;
-
+    private bool serveTargetBasePositionsCached = false;
 
     // ============================================================
     // Receive
     // ============================================================
 
     [Header("Serve Receive / Cut")]
+    [SerializeField] private Transform setterPosition;
+    [SerializeField] private float receiveApexHeight = 4.0f;
+    [SerializeField] private float receiveBackspinRpm = 180.0f;
 
-    [Tooltip(
-        "サーブカット後にボールを返すSetter位置。" +
-        "PlayRootの子に置く。"
-    )]
-    [SerializeField]
-    private Transform setterPosition;
-
-    [Tooltip(
-        "サーブカット軌道の最高到達World Y [m]。"
-    )]
-    [SerializeField]
-    private float receiveApexHeight =
-        4.0f;
-
-    [Tooltip(
-        "サーブカット時のBackspin [rpm]。" +
-        "現段階では見た目の回転のみ。"
-    )]
-    [SerializeField]
-    private float receiveBackspinRpm =
-        180.0f;
-
-    [Tooltip(
-        "Receiver位置で停止するFixedUpdate数。" +
-        "0なら即座にカット。"
-    )]
     [Min(0)]
-    [SerializeField]
-    private int receiveContactFixedFrames =
-        1;
-
-
-    // ============================================================
-    // Setter Toss Target
-    // ============================================================
-
-    [Header("Setter Toss Target")]
-
-    [Tooltip(
-        "Left Tossの到達点。" +
-        "同時にSpike Contact Pointとして扱う。"
-    )]
-    [SerializeField]
-    private Transform leftTossTarget;
-
-    [Tooltip(
-        "Right Tossの到達点。" +
-        "同時にSpike Contact Pointとして扱う。"
-    )]
-    [SerializeField]
-    private Transform rightTossTarget;
-
-    [Header("Selected Toss")]
-
-    [Tooltip("Left / Rightのどちらへトスするか")]
-    [SerializeField]
-    private TossSide selectedTossSide =
-        TossSide.Left;
-
-    [Tooltip(
-        "選択したToss Targetに加えるZ方向Offset [m]。" +
-        "初期値は0。"
-    )]
-    [SerializeField]
-    private float tossTargetZOffset =
-        0.0f;
-
+    [SerializeField] private int receiveContactFixedFrames = 1;
 
     // ============================================================
     // Setter Toss
     // ============================================================
 
+    [Header("Setter Toss Target")]
+    [SerializeField] private Transform leftTossTarget;
+    [SerializeField] private Transform rightTossTarget;
+
+    [Header("Selected Toss")]
+    [SerializeField] private TossSide selectedTossSide = TossSide.Left;
+    [SerializeField] private float tossTargetZOffset = 0.0f;
+
     [Header("Setter Toss")]
+    [SerializeField] private float setApexHeight = 4.5f;
+    [SerializeField] private float setSpinRpm = 60.0f;
 
-    [Tooltip(
-        "Setter Tossの最高到達World Y [m]。" +
-        "Toss TargetのYと同じならTargetがApexになる。"
-    )]
-    [SerializeField]
-    private float setApexHeight =
-        4.5f;
-
-    [Tooltip(
-        "Setter Toss時のボール回転 [rpm]。" +
-        "現段階では見た目のみ。"
-    )]
-    [SerializeField]
-    private float setSpinRpm =
-        60.0f;
-
-    [Tooltip(
-        "Setter位置で停止するFixedUpdate数。" +
-        "0なら即座にToss。"
-    )]
     [Min(0)]
-    [SerializeField]
-    private int setContactFixedFrames =
-        1;
-
+    [SerializeField] private int setContactFixedFrames = 1;
 
     // ============================================================
     // Spike
     // ============================================================
 
     [Header("Spike")]
+    [SerializeField] private Transform spikeTargetLeft;
+    [SerializeField] private Transform spikeTargetRight;
 
-    [Tooltip(
-        "既存のSpike Target Left。" +
-        "現在の実装ではLeft Toss Cross / Right Toss Straightで使用する。"
-    )]
-    [SerializeField]
-    private Transform spikeTargetLeft;
-
-    [Tooltip(
-        "既存のSpike Target Right。" +
-        "現在の実装ではLeft Toss Straight / Right Toss Crossで使用する。"
-    )]
-    [SerializeField]
-    private Transform spikeTargetRight;
-
-    [SerializeField]
-    private SpikeCourse selectedSpikeCourse =
+    [SerializeField] private SpikeCourse selectedSpikeCourse =
         SpikeCourse.Cross;
 
-    [Tooltip("スパイク打球直後の速度 [km/h]")]
-    [SerializeField]
-    private float spikeSpeedKmh =
-        100.0f;
-
-
-    // ============================================================
-    // Spike Target Distance Offset
-    // ============================================================
+    [SerializeField] private float spikeSpeedKmh = 100.0f;
 
     [Header("Spike Target Distance Offset")]
-
-    [Tooltip(
-        "Spike Target Leftを、Spike Contact -> 基準TargetのXZ方向へ" +
-        "何mずらすか。\n" +
-        "+ = 軌道方向へ遠ざける / - = Contact側へ近づける"
-    )]
-    [SerializeField]
-    private float spikeTargetLeftDistanceOffsetMeters =
-        0.0f;
-
-    [Tooltip(
-        "Spike Target Rightを、Spike Contact -> 基準TargetのXZ方向へ" +
-        "何mずらすか。\n" +
-        "+ = 軌道方向へ遠ざける / - = Contact側へ近づける"
-    )]
-    [SerializeField]
-    private float spikeTargetRightDistanceOffsetMeters =
-        0.0f;
-
-
-    // ============================================================
-    // Legacy Spike Target XYZ Offset
-    // ============================================================
-
-    /*
-     * version 3以前のRally JSON / 旧SpikeUIとの互換用。
-     *
-     * 新しいDistance R方式をUIから設定した時点で、
-     * 対応TargetのLegacy Vector3 OffsetはVector3.zeroへ戻す。
-     */
-    [HideInInspector]
-    [SerializeField]
-    private Vector3 spikeTargetLeftOffset =
-        Vector3.zero;
+    [SerializeField] private float spikeTargetLeftDistanceOffsetMeters = 0.0f;
+    [SerializeField] private float spikeTargetRightDistanceOffsetMeters = 0.0f;
 
     [HideInInspector]
-    [SerializeField]
-    private Vector3 spikeTargetRightOffset =
-        Vector3.zero;
+    [SerializeField] private Vector3 spikeTargetLeftOffset = Vector3.zero;
 
+    [HideInInspector]
+    [SerializeField] private Vector3 spikeTargetRightOffset = Vector3.zero;
 
     private Vector3 spikeTargetLeftBaseLocalPosition;
     private Vector3 spikeTargetRightBaseLocalPosition;
-
-    private bool spikeTargetBasePositionsCached =
-        false;
-
+    private bool spikeTargetBasePositionsCached = false;
 
     // ============================================================
     // Block
     // ============================================================
 
-    /*
-     * Blockは独立したON/OFF状態を持たない。
-     * End Phase == PlayPhase.Block のときだけ、
-     * Spike Contact -> Block Contact -> Block Landing の軌道を使用する。
-     */
-
     [Header("Block Trajectory")]
-
-    [Tooltip(
-        "Left Toss時のBlock Contact Point。" +
-        "Block ONではSpike Contact Pointからこの点を必ず通る。"
-    )]
-    [SerializeField]
-    private Transform blockContactPointLeft;
-
-    [Tooltip(
-        "Left Toss時のBlock Landing Point。" +
-        "Block Contact後にボールが落ちる位置。"
-    )]
-    [SerializeField]
-    private Transform blockLandingPointLeft;
-
-    [Tooltip(
-        "Right Toss時のBlock Contact Point。" +
-        "Block ONではSpike Contact Pointからこの点を必ず通る。"
-    )]
-    [SerializeField]
-    private Transform blockContactPointRight;
-
-    [Tooltip(
-        "Right Toss時のBlock Landing Point。" +
-        "Block Contact後にボールが落ちる位置。"
-    )]
-    [SerializeField]
-    private Transform blockLandingPointRight;
-
-
-    // ============================================================
-    // Block Landing Point Position / Legacy Offset
-    // ============================================================
-
-    /*
-     * version 5以降:
-     * Block Landing PointはTransform.localPositionそのものを
-     * Rally条件として扱う。
-     *
-     * 以下のOffsetはversion 4以前のJSON互換専用。
-     * 新しいBlockUIからは使用しない。
-     */
-    [HideInInspector]
-    [SerializeField]
-    private Vector3 blockLandingPointLeftOffset =
-        Vector3.zero;
+    [SerializeField] private Transform blockContactPointLeft;
+    [SerializeField] private Transform blockLandingPointLeft;
+    [SerializeField] private Transform blockContactPointRight;
+    [SerializeField] private Transform blockLandingPointRight;
 
     [HideInInspector]
-    [SerializeField]
-    private Vector3 blockLandingPointRightOffset =
-        Vector3.zero;
+    [SerializeField] private Vector3 blockLandingPointLeftOffset = Vector3.zero;
+
+    [HideInInspector]
+    [SerializeField] private Vector3 blockLandingPointRightOffset = Vector3.zero;
 
     private Vector3 blockLandingPointLeftBaseLocalPosition;
     private Vector3 blockLandingPointRightBaseLocalPosition;
+    private bool blockLandingPointBasePositionsCached = false;
 
-    private bool blockLandingPointBasePositionsCached =
-        false;
-
-    [Tooltip(
-        "Block Contact Pointで停止するFixedUpdate数。" +
-        "0なら接触直後にBlock Landing Pointへ打ち出す。"
-    )]
     [Min(0)]
-    [SerializeField]
-    private int blockContactFixedFrames =
-        1;
+    [SerializeField] private int blockContactFixedFrames = 1;
 
-    [Tooltip(
-        "ブロック接触後のボール速度 [km/h]。" +
-        "減速率ではなく速度を直接指定する。"
-    )]
     [Min(0.1f)]
-    [SerializeField]
-    private float blockExitSpeedKmh =
-        45.0f;
+    [SerializeField] private float blockExitSpeedKmh = 45.0f;
 
-    [Tooltip(
-        "ブロック接触後のボール回転 [rpm]。" +
-        "正の値はトップスピン、負の値はバックスピン。"
-    )]
-    [SerializeField]
-    private float blockSpinRpm =
-        600.0f;
-
+    [SerializeField] private float blockSpinRpm = 600.0f;
 
     // ============================================================
     // Serve Toss
     // ============================================================
 
     [Header("Serve Toss")]
-
-    [Tooltip(
-        "ボール現在位置からトス最高点までの上昇量 [m]"
-    )]
-    [SerializeField]
-    private float tossHeight =
-        1.5f;
-
-    [Tooltip(
-        "下降中にこのWorld Yへ到達した瞬間にサーブを打つ [m]"
-    )]
-    [SerializeField]
-    private float serveHitHeight =
-        3.0f;
-
-    [Tooltip(
-        "ServeStartからサーブ打点までにコート方向へ進む距離 [m]"
-    )]
-    [SerializeField]
-    private float tossForwardDistance =
-        1.0f;
-
-
-    // ============================================================
-    // Spike Serve
-    // ============================================================
+    [SerializeField] private float tossHeight = 1.5f;
+    [SerializeField] private float serveHitHeight = 3.0f;
+    [SerializeField] private float tossForwardDistance = 1.0f;
 
     [Header("Spike Serve")]
-
-    [Tooltip("サーブ打球直後の速度 [km/h]")]
-    [SerializeField]
-    private float serveSpeedKmh =
-        130.0f;
-
-    [Tooltip(
-        "打ち出し角度 [deg]。" +
-        "0=水平、プラス=上向き、マイナス=下向き"
-    )]
-    [SerializeField]
-    private float spikeServeLaunchAngle =
-        2.0f;
-
+    [SerializeField] private float serveSpeedKmh = 130.0f;
+    [SerializeField] private float spikeServeLaunchAngle = 2.0f;
 
     // ============================================================
-    // DHIT / Image Shift
+    // DHIT
     // ============================================================
 
     [Header("DHIT / Image Shift")]
-
-    [Tooltip(
-        "Static / Dynamic HITを管理するDHITController。\n" +
-        "Rally JSONではBase Shift、Dynamic ON/OFF、DHITパラメータも保存する。"
-    )]
-    [SerializeField]
-    private DHITController dhitController;
-
+    [SerializeField] private DHITController dhitController;
 
     // ============================================================
     // Experiment Fade
     // ============================================================
 
     [Header("Experiment Fade")]
+    [SerializeField] private bool enableExperimentFade = true;
+    [SerializeField] private ImageController imageController;
 
-    [Tooltip(
-        "実験用の映像遮蔽を有効にするかどうか。\n" +
-        "End Phase開始から、そのPhaseに対応するDelay秒後にFade Outする。"
-    )]
-    [SerializeField]
-    private bool enableExperimentFade =
-        true;
-
-    [Tooltip(
-        "Shader Fadeを制御するImageController。"
-    )]
-    [SerializeField]
-    private ImageController imageController;
-
-    [Tooltip("End Phase = Serve のとき、Serve開始からFade Out開始までの時間 [s]")]
     [Min(0.0f)]
-    [SerializeField]
-    private float serveFadeDelay =
-        0.80f;
+    [SerializeField] private float serveFadeDelay = 0.80f;
 
-    [Tooltip("End Phase = Receive のとき、Receive開始からFade Out開始までの時間 [s]")]
     [Min(0.0f)]
-    [SerializeField]
-    private float receiveFadeDelay =
-        0.50f;
+    [SerializeField] private float receiveFadeDelay = 0.50f;
 
-    [Tooltip("End Phase = Toss のとき、Toss開始からFade Out開始までの時間 [s]")]
     [Min(0.0f)]
-    [SerializeField]
-    private float tossFadeDelay =
-        0.50f;
+    [SerializeField] private float tossFadeDelay = 0.50f;
 
-    [Tooltip("End Phase = Spike のとき、Spike開始からFade Out開始までの時間 [s]")]
     [Min(0.0f)]
-    [SerializeField]
-    private float spikeFadeDelay =
-        0.20f;
+    [SerializeField] private float spikeFadeDelay = 0.20f;
 
-    [Tooltip(
-        "End Phase = Block のとき、ブロックありSpike開始から" +
-        "Fade Out開始までの時間 [s]"
-    )]
     [Min(0.0f)]
-    [SerializeField]
-    private float blockFadeDelay =
-        0.20f;
+    [SerializeField] private float blockFadeDelay = 0.20f;
 
-    [Tooltip(
-        "Fade Outにかける時間 [s]。\n" +
-        "0なら指定時刻で瞬時に完全遮蔽する。"
-    )]
     [Min(0.0f)]
-    [SerializeField]
-    private float fadeDuration =
-        0.03f;
-
+    [SerializeField] private float fadeDuration = 0.03f;
 
     // ============================================================
     // Rally JSON
     // ============================================================
 
     [Header("Rally JSON")]
-
-    [Tooltip(
-        "Rally Save / Loadで使用するJSONファイル名。\n" +
-        "EditorではAssets/Experiment/Rallies以下に保存し、Gitで共有できる。\n" +
-        "BuildではApplication.persistentDataPath/Experiment/Ralliesを使用する。"
-    )]
-    [SerializeField]
-    private string defaultRallyJsonFileName =
+    [SerializeField] private string defaultRallyJsonFileName =
         "rally_settings.json";
 
-    [Tooltip(
-        "EditorでAssetsフォルダから見たRally JSON保存先。\n" +
-        "通常はExperiment/Ralliesのままで使用する。"
-    )]
-    [SerializeField]
-    private string rallyJsonRelativeFolder =
+    [SerializeField] private string rallyJsonRelativeFolder =
         "Experiment/Rallies";
 
-
     // ============================================================
-    // Startup
+    // Startup / Debug
     // ============================================================
 
     [Header("Startup")]
-
-    [SerializeField]
-    private bool spawnOnStart =
-        true;
-
-
-    // ============================================================
-    // Keyboard Debug
-    // ============================================================
+    [SerializeField] private bool spawnOnStart = true;
 
     [Header("Keyboard Debug")]
-
-    [SerializeField]
-    private bool enableKeyboardDebug =
-        true;
-
+    [SerializeField] private bool enableKeyboardDebug = true;
 
     // ============================================================
     // Runtime
     // ============================================================
 
     private VolleyballBallPhysics currentBallPhysics;
-
     private Coroutine experimentFadeTimerCoroutine;
 
-    private Quaternion basePlayRootRotation =
-        Quaternion.identity;
-
-    private bool playRootRotationCached =
-        false;
-
+    private Quaternion basePlayRootRotation = Quaternion.identity;
+    private bool playRootRotationCached = false;
 
     // ============================================================
     // Properties
     // ============================================================
 
-    public CourtSide CurrentCourtSide =>
-        currentCourtSide;
+    public CourtSide CurrentCourtSide => currentCourtSide;
+    public PlayPhase StartPhase => startPhase;
+    public PlayPhase EndPhase => endPhase;
+    public TossSide CurrentTossSide => selectedTossSide;
+    public SpikeCourse CurrentSpikeCourse => selectedSpikeCourse;
 
-    public PlayPhase StartPhase =>
-        startPhase;
+    public float SpikeSpeedKmh => spikeSpeedKmh;
+    public float SpikeFadeDelay => spikeFadeDelay;
 
-    public PlayPhase EndPhase =>
-        endPhase;
-
-    public TossSide CurrentTossSide =>
-        selectedTossSide;
-
-    public SpikeCourse CurrentSpikeCourse =>
-        selectedSpikeCourse;
-
-    public float SpikeSpeedKmh =>
-        spikeSpeedKmh;
-
-    public float SpikeFadeDelay =>
-        spikeFadeDelay;
-
-    public float BlockExitSpeedKmh =>
-        blockExitSpeedKmh;
-
-    public float BlockSpinRpm =>
-        blockSpinRpm;
-
-    public float BlockFadeDelay =>
-        blockFadeDelay;
+    public float BlockExitSpeedKmh => blockExitSpeedKmh;
+    public float BlockSpinRpm => blockSpinRpm;
+    public float BlockFadeDelay => blockFadeDelay;
 
     public BlockMode CurrentBlockMode =>
-        endPhase == PlayPhase.Block
-            ? BlockMode.Block
-            : BlockMode.None;
+        endPhase == PlayPhase.Block ? BlockMode.Block : BlockMode.None;
 
-    public float TossTargetZOffset =>
-        tossTargetZOffset;
+    public float TossTargetZOffset => tossTargetZOffset;
+    public float SetterTossApexHeight => setApexHeight;
 
-    public float SetterTossApexHeight =>
-        setApexHeight;
+    public ServeStartPosition CurrentServeStart => selectedServeStart;
+    public ServeTargetPosition CurrentServeTarget => selectedServeTarget;
 
-    public ServeStartPosition CurrentServeStart =>
-        selectedServeStart;
+    public float ServeTossHeight => tossHeight;
+    public float ServeHitHeight => serveHitHeight;
+    public float ServeTossForwardDistance => tossForwardDistance;
+    public float ServeSpeedKmh => serveSpeedKmh;
+    public float SpikeServeLaunchAngle => spikeServeLaunchAngle;
+    public float ServeFadeDelay => serveFadeDelay;
 
-    public ServeTargetPosition CurrentServeTarget =>
-        selectedServeTarget;
-
-    public float ServeTossHeight =>
-        tossHeight;
-
-    public float ServeHitHeight =>
-        serveHitHeight;
-
-    public float ServeTossForwardDistance =>
-        tossForwardDistance;
-
-    public float ServeSpeedKmh =>
-        serveSpeedKmh;
-
-    public float SpikeServeLaunchAngle =>
-        spikeServeLaunchAngle;
-
-    public float ServeFadeDelay =>
-        serveFadeDelay;
-
-    public bool ExperimentFadeEnabled =>
-        enableExperimentFade;
+    public bool ExperimentFadeEnabled => enableExperimentFade;
 
     public bool DynamicShiftEnabled =>
-        dhitController != null &&
-        dhitController.IsDynamic;
+        dhitController != null && dhitController.IsDynamic;
 
     public float BaseShiftPixels =>
         dhitController != null
             ? dhitController.BaseShiftPixels
-            : (imageController != null
-                ? imageController.ShiftPixels
-                : 0.0f);
+            : (imageController != null ? imageController.ShiftPixels : 0.0f);
 
-    public float ReceiveApexHeight =>
-        receiveApexHeight;
-
-    public float ReceiveBackspinRpm =>
-        receiveBackspinRpm;
-
-    public int ReceiveContactFixedFrames =>
-        receiveContactFixedFrames;
+    public float ReceiveApexHeight => receiveApexHeight;
+    public float ReceiveBackspinRpm => receiveBackspinRpm;
+    public int ReceiveContactFixedFrames => receiveContactFixedFrames;
 
     public Vector3 SetterLocalPosition =>
-        setterPosition != null
-            ? setterPosition.localPosition
-            : Vector3.zero;
+        setterPosition != null ? setterPosition.localPosition : Vector3.zero;
 
-    public float SetSpinRpm =>
-        setSpinRpm;
+    public float SetSpinRpm => setSpinRpm;
+    public int SetContactFixedFrames => setContactFixedFrames;
+    public int BlockContactFixedFrames => blockContactFixedFrames;
 
-    public int SetContactFixedFrames =>
-        setContactFixedFrames;
-
-    public int BlockContactFixedFrames =>
-        blockContactFixedFrames;
-
-    public float ReceiveFadeDelay =>
-        receiveFadeDelay;
-
-    public float TossFadeDelay =>
-        tossFadeDelay;
-
-    public float FadeDuration =>
-        fadeDuration;
-
+    public float ReceiveFadeDelay => receiveFadeDelay;
+    public float TossFadeDelay => tossFadeDelay;
+    public float FadeDuration => fadeDuration;
 
     // ============================================================
-    // Unity
+    // Unity Lifecycle
     // ============================================================
 
     private void Awake()
@@ -910,115 +423,60 @@ public class RallyController : MonoBehaviour
         CacheSpikeTargetBasePositions();
         ApplyAllSpikeTargetOffsets();
 
-        /*
-         * 旧version 4以前のOffset JSONを読み込むため、
-         * 起動時の基準位置だけは保持する。
-         *
-         * version 5以降はTransform.localPosition自体が正なので、
-         * 起動時にOffsetは適用しない。
-         */
         CacheBlockLandingPointBasePositions();
     }
 
     private void Start()
     {
         ApplyCourtSide();
-
         ValidateSimulationRange();
 
         if (spawnOnStart)
-        {
             ResetSelectedSimulation();
-        }
     }
 
     private void Update()
     {
         if (!enableKeyboardDebug)
-        {
             return;
-        }
 
-        /*
-         * TMP_InputFieldへ数値を入力している最中は、
-         * Alpha1～6 / V / Z のデバッグショートカットを無効化する。
-         */
         if (EventSystem.current != null)
         {
-            GameObject selectedObject =
+            GameObject selected =
                 EventSystem.current.currentSelectedGameObject;
 
-            if (
-                selectedObject != null &&
-                selectedObject.GetComponent<TMP_InputField>() != null
-            )
-            {
+            if (selected != null &&
+                selected.GetComponent<TMP_InputField>() != null)
                 return;
-            }
         }
 
         if (Input.GetKeyDown(KeyCode.Alpha1))
-        {
-            SelectSimulationRange(
-                PlayPhase.Serve,
-                PlayPhase.Serve
-            );
-        }
+            SelectSimulationRange(PlayPhase.Serve, PlayPhase.Serve);
 
         if (Input.GetKeyDown(KeyCode.Alpha2))
-        {
-            SelectSimulationRange(
-                PlayPhase.Receive,
-                PlayPhase.Receive
-            );
-        }
+            SelectSimulationRange(PlayPhase.Receive, PlayPhase.Receive);
 
         if (Input.GetKeyDown(KeyCode.Alpha3))
-        {
-            SelectSimulationRange(
-                PlayPhase.Serve,
-                PlayPhase.Receive
-            );
-        }
+            SelectSimulationRange(PlayPhase.Serve, PlayPhase.Receive);
 
         if (Input.GetKeyDown(KeyCode.Alpha4))
-        {
-            SelectSimulationRange(
-                PlayPhase.Toss,
-                PlayPhase.Spike
-            );
-        }
+            SelectSimulationRange(PlayPhase.Toss, PlayPhase.Spike);
 
         if (Input.GetKeyDown(KeyCode.Alpha5))
-        {
-            SelectSimulationRange(
-                PlayPhase.Serve,
-                PlayPhase.Spike
-            );
-        }
+            SelectSimulationRange(PlayPhase.Serve, PlayPhase.Spike);
 
         if (Input.GetKeyDown(KeyCode.Alpha6))
-        {
-            SelectSimulationRange(
-                PlayPhase.Serve,
-                PlayPhase.Block
-            );
-        }
+            SelectSimulationRange(PlayPhase.Serve, PlayPhase.Block);
 
         if (Input.GetKeyDown(KeyCode.V))
-        {
             StartSelectedSimulation();
-        }
 
         if (Input.GetKeyDown(KeyCode.Z))
-        {
             ResetSelectedSimulation();
-        }
     }
 
-
     // ============================================================
-    // Simulation Selection
+    // Simulation Range
     // ============================================================
 
     public void SelectSimulationRange(
@@ -1026,167 +484,91 @@ public class RallyController : MonoBehaviour
         PlayPhase newEndPhase
     )
     {
-        if (
-            (int)newStartPhase >
-            (int)newEndPhase
-        )
+        if ((int)newStartPhase > (int)newEndPhase)
         {
             Debug.LogError(
-                "[RallyController] " +
-                "Start PhaseはEnd Phase以前にしてください。"
-            );
-
+                "[RallyController] Start Phase must precede End Phase.");
             return;
         }
 
-        startPhase =
-            newStartPhase;
-
-        endPhase =
-            newEndPhase;
-
-        Debug.Log(
-            "[RallyController] Simulation Selected\n" +
-            $"Start = {startPhase}\n" +
-            $"End = {endPhase}"
-        );
+        startPhase = newStartPhase;
+        endPhase = newEndPhase;
 
         ResetSelectedSimulation();
     }
 
-    public void SetStartPhase(
-        int index
-    )
+    public void SetStartPhase(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                4
-            );
-
-        startPhase =
-            (PlayPhase)index;
-
+        startPhase = (PlayPhase)Mathf.Clamp(index, 0, 4);
         ValidateSimulationRange();
     }
 
-    public void SetEndPhase(
-        int index
-    )
+    public void SetEndPhase(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                4
-            );
-
-        endPhase =
-            (PlayPhase)index;
-
+        endPhase = (PlayPhase)Mathf.Clamp(index, 0, 4);
         ValidateSimulationRange();
     }
 
     private void ValidateSimulationRange()
     {
-        if (
-            (int)startPhase <=
-            (int)endPhase
-        )
-        {
+        if ((int)startPhase <= (int)endPhase)
             return;
-        }
 
         Debug.LogWarning(
-            "[RallyController] " +
-            "Start PhaseがEnd Phaseより後なので、" +
-            "End PhaseをStart Phaseへ合わせます。"
-        );
+            "[RallyController] End Phase adjusted to Start Phase.");
 
-        endPhase =
-            startPhase;
+        endPhase = startPhase;
     }
 
-    private bool ShouldContinueAfter(
-        PlayPhase completedPhase
-    )
+    private bool ShouldContinueAfter(PlayPhase completedPhase)
     {
-        return
-            (int)completedPhase <
-            (int)endPhase;
+        return (int)completedPhase < (int)endPhase;
     }
-
 
     // ============================================================
-    // Simulation Start
+    // Simulation Start / Reset
     // ============================================================
 
     public void StartSelectedSimulation()
     {
         ValidateSimulationRange();
-
         ResetExperimentFade();
 
         if (dhitController != null)
-        {
             dhitController.BeginTrial();
-        }
 
         switch (startPhase)
         {
             case PlayPhase.Serve:
-
                 SpawnBallAtSelectedStart();
                 StartSpikeServeSequence();
-
                 break;
 
             case PlayPhase.Receive:
-
                 SpawnBallAtSelectedReceiver();
                 StartReceiveSequence();
-
                 break;
 
             case PlayPhase.Toss:
-
                 SpawnBallAtSetter();
                 StartSetterTossSequence();
-
                 break;
 
             case PlayPhase.Spike:
-
-                SpawnBallAtSelectedTossTarget();
-                StartSpikeSequence();
-
-                break;
-
             case PlayPhase.Block:
-
                 SpawnBallAtSelectedTossTarget();
                 StartSpikeSequence();
-
                 break;
         }
     }
-
-
-    // ============================================================
-    // Simulation Reset
-    // ============================================================
 
     public void ResetSelectedSimulation()
     {
         ValidateSimulationRange();
-
         ResetExperimentFade();
 
         if (dhitController != null)
-        {
             dhitController.EndTrial();
-        }
 
         switch (startPhase)
         {
@@ -1203,107 +585,65 @@ public class RallyController : MonoBehaviour
                 break;
 
             case PlayPhase.Spike:
-                SpawnBallAtSelectedTossTarget();
-                break;
-
             case PlayPhase.Block:
                 SpawnBallAtSelectedTossTarget();
                 break;
         }
     }
 
-
     // ============================================================
-    // Court Side
+    // Court
     // ============================================================
 
     private void CachePlayRootRotation()
     {
         if (playRoot == null)
         {
-            Debug.LogWarning(
-                "[RallyController] PlayRoot が設定されていません。"
-            );
-
+            Debug.LogWarning("[RallyController] PlayRoot is null.");
             return;
         }
 
-        basePlayRootRotation =
-            playRoot.localRotation;
-
-        playRootRotationCached =
-            true;
+        basePlayRootRotation = playRoot.localRotation;
+        playRootRotationCached = true;
     }
 
     private void ApplyCourtSide()
     {
         if (playRoot == null)
-        {
             return;
-        }
 
         if (!playRootRotationCached)
-        {
             CachePlayRootRotation();
-        }
 
         if (!playRootRotationCached)
-        {
             return;
-        }
 
-        if (
-            currentCourtSide ==
-            CourtSide.Left
-        )
-        {
-            playRoot.localRotation =
-                basePlayRootRotation;
-        }
-        else
-        {
-            playRoot.localRotation =
-                basePlayRootRotation *
-                Quaternion.Euler(
-                    0.0f,
-                    180.0f,
-                    0.0f
-                );
-        }
+        playRoot.localRotation =
+            currentCourtSide == CourtSide.Left
+                ? basePlayRootRotation
+                : basePlayRootRotation *
+                  Quaternion.Euler(0.0f, 180.0f, 0.0f);
     }
 
     public void ToggleCourt()
     {
         if (playRoot == null)
         {
-            Debug.LogError(
-                "[RallyController] PlayRoot が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] PlayRoot is null.");
             return;
         }
 
         currentCourtSide =
-            currentCourtSide ==
-            CourtSide.Left
+            currentCourtSide == CourtSide.Left
                 ? CourtSide.Right
                 : CourtSide.Left;
 
         ApplyCourtSide();
-
-        Debug.Log(
-            "[RallyController] Court Changed\n" +
-            $"Court Side = {currentCourtSide}\n" +
-            $"PlayRoot Position = {playRoot.position}\n" +
-            $"PlayRoot Rotation = {playRoot.localEulerAngles}"
-        );
-
         ResetSelectedSimulation();
     }
 
-
     // ============================================================
-    // Generic Ball Spawn
+    // Ball Spawn / Events
     // ============================================================
 
     private GameObject SpawnBallAtPoint(
@@ -1313,33 +653,22 @@ public class RallyController : MonoBehaviour
     {
         if (ballSpawner == null)
         {
-            Debug.LogError(
-                "[RallyController] BallSpawner が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] BallSpawner is null.");
             return null;
         }
 
         if (spawnPoint == null)
         {
-            Debug.LogError(
-                "[RallyController] Spawn Point がnullです。"
-            );
-
+            Debug.LogError("[RallyController] Spawn Point is null.");
             return null;
         }
 
         UnbindCurrentBall();
 
-        GameObject newBall =
-            ballSpawner.RespawnBall(
-                spawnPoint
-            );
+        GameObject newBall = ballSpawner.RespawnBall(spawnPoint);
 
         if (newBall == null)
-        {
             return null;
-        }
 
         currentBallPhysics =
             newBall.GetComponent<VolleyballBallPhysics>();
@@ -1347,21 +676,14 @@ public class RallyController : MonoBehaviour
         if (currentBallPhysics == null)
         {
             Debug.LogError(
-                "[RallyController] " +
-                "Ball PrefabにVolleyballBallPhysicsがありません。"
-            );
-
+                "[RallyController] VolleyballBallPhysics is missing.");
             return null;
         }
 
         BindCurrentBallEvents();
 
         Debug.Log(
-            "[RallyController] Ball Spawn\n" +
-            $"Type = {label}\n" +
-            $"Court = {currentCourtSide}\n" +
-            $"Position = {spawnPoint.position}"
-        );
+            $"[RallyController] Spawn: {label}, {spawnPoint.position}");
 
         return newBall;
     }
@@ -1369,124 +691,86 @@ public class RallyController : MonoBehaviour
     private void BindCurrentBallEvents()
     {
         if (currentBallPhysics == null)
-        {
             return;
-        }
 
-        currentBallPhysics.OnTossApex +=
-            HandleTossApex;
-
-        currentBallPhysics.OnServeHitPoint +=
-            HandleServeHitPoint;
-
-        currentBallPhysics.OnServeReachedTarget +=
-            HandleServeReachedTarget;
-
-        currentBallPhysics.OnReceiveReachedTarget +=
-            HandleReceiveReachedTarget;
-
-        currentBallPhysics.OnSetReachedTarget +=
-            HandleSetReachedTarget;
-
-        currentBallPhysics.OnSpikeReachedTarget +=
-            HandleSpikeReachedTarget;
+        currentBallPhysics.OnTossApex += HandleTossApex;
+        currentBallPhysics.OnServeHitPoint += HandleServeHitPoint;
+        currentBallPhysics.OnServeReachedTarget += HandleServeReachedTarget;
+        currentBallPhysics.OnReceiveReachedTarget += HandleReceiveReachedTarget;
+        currentBallPhysics.OnSetReachedTarget += HandleSetReachedTarget;
+        currentBallPhysics.OnSpikeReachedTarget += HandleSpikeReachedTarget;
     }
 
+    private void UnbindCurrentBall()
+    {
+        if (currentBallPhysics == null)
+            return;
 
-    // ============================================================
-    // Spawn
-    // ============================================================
+        currentBallPhysics.OnTossApex -= HandleTossApex;
+        currentBallPhysics.OnServeHitPoint -= HandleServeHitPoint;
+        currentBallPhysics.OnServeReachedTarget -= HandleServeReachedTarget;
+        currentBallPhysics.OnReceiveReachedTarget -= HandleReceiveReachedTarget;
+        currentBallPhysics.OnSetReachedTarget -= HandleSetReachedTarget;
+        currentBallPhysics.OnSpikeReachedTarget -= HandleSpikeReachedTarget;
+
+        currentBallPhysics = null;
+    }
 
     public void SpawnBallAtSelectedStart()
     {
-        Transform spawnPoint =
-            GetSelectedServeStart();
+        Transform point = GetSelectedServeStart();
 
-        if (spawnPoint == null)
+        if (point == null)
         {
-            Debug.LogError(
-                "[RallyController] ServeStart が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] Serve Start is null.");
             return;
         }
 
-        SpawnBallAtPoint(
-            spawnPoint,
-            "Serve Start"
-        );
+        SpawnBallAtPoint(point, "Serve Start");
     }
 
     public void SpawnBallAtSelectedReceiver()
     {
-        Transform receiver =
-            GetSelectedServeTarget();
+        Transform point = GetSelectedServeTarget();
 
-        if (receiver == null)
+        if (point == null)
         {
-            Debug.LogError(
-                "[RallyController] Receiver が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] Receiver is null.");
             return;
         }
 
-        SpawnBallAtPoint(
-            receiver,
-            "Receive Start"
-        );
+        SpawnBallAtPoint(point, "Receive Start");
     }
 
     private void SpawnBallAtSetter()
     {
         if (setterPosition == null)
         {
-            Debug.LogError(
-                "[RallyController] Setter Position が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] Setter Position is null.");
             return;
         }
 
-        SpawnBallAtPoint(
-            setterPosition,
-            "Setter Toss Start"
-        );
+        SpawnBallAtPoint(setterPosition, "Setter Toss Start");
     }
 
     private void SpawnBallAtSelectedTossTarget()
     {
-        Transform tossTarget =
-            GetSelectedTossTarget();
+        Transform target = GetSelectedTossTarget();
 
-        if (tossTarget == null)
+        if (target == null)
         {
-            Debug.LogError(
-                "[RallyController] Toss Target が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] Toss Target is null.");
             return;
         }
 
-        GameObject newBall =
-            SpawnBallAtPoint(
-                tossTarget,
-                "Spike Contact Point"
-            );
+        GameObject ball =
+            SpawnBallAtPoint(target, "Spike Contact Point");
 
-        if (
-            newBall == null ||
-            currentBallPhysics == null
-        )
-        {
+        if (ball == null || currentBallPhysics == null)
             return;
-        }
 
-        currentBallPhysics.PlaceAt(
-            GetSelectedTossTargetPosition()
-        );
+        currentBallPhysics.PlaceAt(GetSelectedTossTargetPosition());
     }
-
 
     // ============================================================
     // Serve Sequence
@@ -1496,59 +780,31 @@ public class RallyController : MonoBehaviour
     {
         if (currentBallPhysics == null)
         {
-            Debug.LogWarning(
-                "[RallyController] Ballがありません。"
-            );
-
+            Debug.LogWarning("[RallyController] Ball is null.");
             return;
         }
 
-        Transform target =
-            GetSelectedServeTarget();
+        Transform target = GetSelectedServeTarget();
 
         if (target == null)
         {
-            Debug.LogError(
-                "[RallyController] Receiver Target が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] Receiver Target is null.");
             return;
         }
 
         Vector3 tossDirection =
-            target.position -
-            currentBallPhysics.transform.position;
+            target.position - currentBallPhysics.transform.position;
 
-        tossDirection.y =
-            0.0f;
+        tossDirection.y = 0.0f;
 
-        if (
-            tossDirection.sqrMagnitude <=
-            0.0001f
-        )
+        if (tossDirection.sqrMagnitude <= 0.0001f)
         {
-            Debug.LogError(
-                "[RallyController] Toss Directionを計算できません。"
-            );
-
+            Debug.LogError("[RallyController] Invalid Toss Direction.");
             return;
         }
 
         tossDirection.Normalize();
-
-        Debug.Log(
-            "[RallyController] Serve Toss Start\n" +
-            $"Court = {currentCourtSide}\n" +
-            $"Receiver = {target.name}\n" +
-            $"Receiver Position = {target.position}\n" +
-            $"Toss Height = {tossHeight:F2} m\n" +
-            $"Serve Hit Height = {serveHitHeight:F2} m\n" +
-            $"Forward Distance = {tossForwardDistance:F2} m"
-        );
-
-        NotifyPhaseStarted(
-            PlayPhase.Serve
-        );
+        NotifyPhaseStarted(PlayPhase.Serve);
 
         currentBallPhysics.TossUp(
             tossHeight,
@@ -1558,85 +814,28 @@ public class RallyController : MonoBehaviour
         );
     }
 
-
-    // ============================================================
-    // Receive Sequence
-    // ============================================================
-
-    private void StartReceiveSequence()
-    {
-        if (currentBallPhysics == null)
-        {
-            return;
-        }
-
-        if (setterPosition == null)
-        {
-            Debug.LogError(
-                "[RallyController] Setter Position が設定されていません。"
-            );
-
-            return;
-        }
-
-        NotifyPhaseStarted(
-            PlayPhase.Receive
-        );
-
-        currentBallPhysics.ReceiveToSetter(
-            setterPosition,
-            receiveApexHeight,
-            receiveBackspinRpm,
-            receiveContactFixedFrames
-        );
-    }
-
-
-    // ============================================================
-    // Serve Events
-    // ============================================================
-
     private void HandleTossApex()
     {
         if (currentBallPhysics == null)
-        {
             return;
-        }
 
         Debug.Log(
-            "[RallyController] Serve Toss Apex\n" +
-            $"Position = {currentBallPhysics.transform.position}"
-        );
+            "[RallyController] Serve Toss Apex: " +
+            currentBallPhysics.transform.position);
     }
 
     private void HandleServeHitPoint()
     {
         if (currentBallPhysics == null)
-        {
             return;
-        }
 
-        Transform target =
-            GetSelectedServeTarget();
+        Transform target = GetSelectedServeTarget();
 
         if (target == null)
         {
-            Debug.LogError(
-                "[RallyController] Receiver Target が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] Receiver Target is null.");
             return;
         }
-
-        Debug.Log(
-            "[RallyController] Spike Serve Impact\n" +
-            $"Court = {currentCourtSide}\n" +
-            $"Hit Position = {currentBallPhysics.transform.position}\n" +
-            $"Receiver = {target.name}\n" +
-            $"Receiver Position = {target.position}\n" +
-            $"Speed = {serveSpeedKmh:F1} km/h\n" +
-            $"Launch Angle = {spikeServeLaunchAngle:F2} deg"
-        );
 
         currentBallPhysics.SpikeServe(
             target,
@@ -1648,71 +847,55 @@ public class RallyController : MonoBehaviour
     private void HandleServeReachedTarget()
     {
         if (currentBallPhysics == null)
-        {
             return;
-        }
 
-        Transform receiver =
-            GetSelectedServeTarget();
-
-        Debug.Log(
-            "[RallyController] Serve Completed\n" +
-            $"Receiver = " +
-            $"{(receiver != null ? receiver.name : "null")}\n" +
-            $"Ball Position = {currentBallPhysics.transform.position}"
-        );
-
-        if (
-            !ShouldContinueAfter(
-                PlayPhase.Serve
-            )
-        )
+        if (!ShouldContinueAfter(PlayPhase.Serve))
         {
-            Debug.Log(
-                "[RallyController] Simulation Finished at Serve."
-            );
-
+            Debug.Log("[RallyController] Finished at Serve.");
             return;
         }
 
         StartReceiveSequence();
     }
 
+    // ============================================================
+    // Receive Sequence
+    // ============================================================
 
-    // ============================================================
-    // Receive Completed
-    // ============================================================
+    private void StartReceiveSequence()
+    {
+        if (currentBallPhysics == null)
+            return;
+
+        if (setterPosition == null)
+        {
+            Debug.LogError("[RallyController] Setter Position is null.");
+            return;
+        }
+
+        NotifyPhaseStarted(PlayPhase.Receive);
+
+        currentBallPhysics.ReceiveToSetter(
+            setterPosition,
+            receiveApexHeight,
+            receiveBackspinRpm,
+            receiveContactFixedFrames
+        );
+    }
 
     private void HandleReceiveReachedTarget()
     {
         if (currentBallPhysics == null)
-        {
             return;
-        }
 
-        Debug.Log(
-            "[RallyController] Receive Completed\n" +
-            $"Setter = " +
-            $"{(setterPosition != null ? setterPosition.name : "null")}\n" +
-            $"Ball Position = {currentBallPhysics.transform.position}"
-        );
-
-        if (
-            !ShouldContinueAfter(
-                PlayPhase.Receive
-            )
-        )
+        if (!ShouldContinueAfter(PlayPhase.Receive))
         {
-            Debug.Log(
-                "[RallyController] Simulation Finished at Receive."
-            );
-
+            Debug.Log("[RallyController] Finished at Receive.");
             return;
         }
 
         StartSetterTossSequence();
     }
-
 
     // ============================================================
     // Setter Toss
@@ -1721,45 +904,20 @@ public class RallyController : MonoBehaviour
     private void StartSetterTossSequence()
     {
         if (currentBallPhysics == null)
-        {
-            Debug.LogWarning(
-                "[RallyController] Ballがありません。"
-            );
+            return;
 
+        Transform target = GetSelectedTossTarget();
+
+        if (target == null)
+        {
+            Debug.LogError("[RallyController] Toss Target is null.");
             return;
         }
 
-        Transform tossTarget =
-            GetSelectedTossTarget();
-
-        if (tossTarget == null)
-        {
-            Debug.LogError(
-                "[RallyController] Toss Target が設定されていません。"
-            );
-
-            return;
-        }
-
-        Vector3 targetPosition =
-            GetSelectedTossTargetPosition();
-
-        Debug.Log(
-            "[RallyController] Setter Toss Start\n" +
-            $"Toss Side = {selectedTossSide}\n" +
-            $"Target = {tossTarget.name}\n" +
-            $"Base Target Position = {tossTarget.position}\n" +
-            $"Z Offset = {tossTargetZOffset:F3} m\n" +
-            $"Actual Target Position = {targetPosition}\n" +
-            $"Apex Height = {setApexHeight:F3} m"
-        );
-
-        NotifyPhaseStarted(
-            PlayPhase.Toss
-        );
+        NotifyPhaseStarted(PlayPhase.Toss);
 
         currentBallPhysics.SetToTarget(
-            targetPosition,
+            GetSelectedTossTargetPosition(),
             setApexHeight,
             setSpinRpm,
             setContactFixedFrames
@@ -1769,99 +927,43 @@ public class RallyController : MonoBehaviour
     private void HandleSetReachedTarget()
     {
         if (currentBallPhysics == null)
-        {
             return;
-        }
 
-        Debug.Log(
-            "[RallyController] Set Completed\n" +
-            $"Toss Side = {selectedTossSide}\n" +
-            $"Spike Contact Position = " +
-            $"{currentBallPhysics.transform.position}"
-        );
-
-        if (
-            !ShouldContinueAfter(
-                PlayPhase.Toss
-            )
-        )
+        if (!ShouldContinueAfter(PlayPhase.Toss))
         {
-            Debug.Log(
-                "[RallyController] Simulation Finished at Toss."
-            );
-
+            Debug.Log("[RallyController] Finished at Toss.");
             return;
         }
 
         StartSpikeSequence();
     }
 
-
     // ============================================================
-    // Spike
+    // Spike / Block
     // ============================================================
 
     private void StartSpikeSequence()
     {
         if (currentBallPhysics == null)
-        {
-            Debug.LogWarning(
-                "[RallyController] Ballがありません。"
-            );
-
             return;
-        }
 
-        bool useBlock =
-            endPhase ==
-            PlayPhase.Block;
-
-        if (useBlock)
+        if (endPhase == PlayPhase.Block)
         {
-            Transform blockContactPoint =
-                GetSelectedBlockContactPoint();
+            Transform contact = GetSelectedBlockContactPoint();
+            Transform landing = GetSelectedBlockLandingPoint();
 
-            Transform blockLandingPoint =
-                GetSelectedBlockLandingPoint();
-
-            if (
-                blockContactPoint == null ||
-                blockLandingPoint == null
-            )
+            if (contact == null || landing == null)
             {
                 Debug.LogError(
-                    "[RallyController] End PhaseがBlockですが、" +
-                    "Block Contact Point / Block Landing Pointが設定されていません。\n" +
-                    $"Toss Side = {selectedTossSide}"
-                );
-
+                    "[RallyController] Block Contact/Landing Point is null.");
                 return;
             }
 
-            Debug.Log(
-                "[RallyController] Block Sequence Start\n" +
-                $"End Phase = {endPhase}\n" +
-                $"Toss Side = {selectedTossSide}\n" +
-                $"Course = {selectedSpikeCourse}\n" +
-                $"Spike Contact Position = " +
-                $"{currentBallPhysics.transform.position}\n" +
-                $"Block Contact Point = {blockContactPoint.name}\n" +
-                $"Block Contact Position = {blockContactPoint.position}\n" +
-                $"Spike Speed = {spikeSpeedKmh:F1} km/h\n" +
-                $"Block Contact Frames = {blockContactFixedFrames}\n" +
-                $"Block Landing Point = {blockLandingPoint.name}\n" +
-                $"Block Landing Position = {blockLandingPoint.position}\n" +
-                $"Block Exit Speed = {blockExitSpeedKmh:F1} km/h\n" +
-                $"Block Spin = {blockSpinRpm:F1} rpm"
-            );
-
-            NotifyPhaseStarted(
-                PlayPhase.Block
-            );
+            NotifyPhaseStarted(PlayPhase.Block);
 
             currentBallPhysics.SpikeWithBlock(
-                blockContactPoint,
-                blockLandingPoint,
+                contact,
+                landing,
                 spikeSpeedKmh,
                 blockExitSpeedKmh,
                 blockSpinRpm,
@@ -1871,33 +973,15 @@ public class RallyController : MonoBehaviour
             return;
         }
 
-        Transform spikeTarget =
-            GetSelectedSpikeTarget();
+        Transform spikeTarget = GetSelectedSpikeTarget();
 
         if (spikeTarget == null)
         {
-            Debug.LogError(
-                "[RallyController] Spike Target が設定されていません。"
-            );
-
+            Debug.LogError("[RallyController] Spike Target is null.");
             return;
         }
 
-        Debug.Log(
-            "[RallyController] Spike Start\n" +
-            $"End Phase = {endPhase}\n" +
-            $"Toss Side = {selectedTossSide}\n" +
-            $"Course = {selectedSpikeCourse}\n" +
-            $"Contact Position = " +
-            $"{currentBallPhysics.transform.position}\n" +
-            $"Target = {spikeTarget.name}\n" +
-            $"Target Position = {spikeTarget.position}\n" +
-            $"Speed = {spikeSpeedKmh:F1} km/h"
-        );
-
-        NotifyPhaseStarted(
-            PlayPhase.Spike
-        );
+        NotifyPhaseStarted(PlayPhase.Spike);
 
         currentBallPhysics.Spike(
             spikeTarget,
@@ -1905,129 +989,56 @@ public class RallyController : MonoBehaviour
         );
     }
 
-
     private void HandleSpikeReachedTarget()
     {
         if (currentBallPhysics == null)
-        {
             return;
-        }
 
-        if (
-            endPhase ==
-            PlayPhase.Block
-        )
-        {
-            Transform blockLandingPoint =
-                GetSelectedBlockLandingPoint();
-
-            Debug.Log(
-                "[RallyController] Block Landing Completed\n" +
-                $"Toss Side = {selectedTossSide}\n" +
-                $"Course = {selectedSpikeCourse}\n" +
-                $"Landing Point = " +
-                $"{(blockLandingPoint != null ? blockLandingPoint.name : "null")}\n" +
-                $"Ball Position = " +
-                $"{currentBallPhysics.transform.position}"
-            );
-
-            Debug.Log(
-                "[RallyController] Simulation Finished at Block."
-            );
-
-            return;
-        }
-
-        Transform spikeTarget =
-            GetSelectedSpikeTarget();
-
-        Debug.Log(
-            "[RallyController] Spike Target Reached\n" +
-            $"Toss Side = {selectedTossSide}\n" +
-            $"Course = {selectedSpikeCourse}\n" +
-            $"Target = " +
-            $"{(spikeTarget != null ? spikeTarget.name : "null")}\n" +
-            $"Ball Position = " +
-            $"{currentBallPhysics.transform.position}"
-        );
-
-        Debug.Log(
-            "[RallyController] Simulation Finished at Spike."
-        );
+        if (endPhase == PlayPhase.Block)
+            Debug.Log("[RallyController] Finished at Block.");
+        else
+            Debug.Log("[RallyController] Finished at Spike.");
     }
 
-
     // ============================================================
-    // Rally JSON Save / Load
+    // Capture Rally Settings
     // ============================================================
 
     public RallySettingsData CreateCurrentRallySettings()
     {
-        DhitSettings dhitSettingsSnapshot =
-            dhitController != null
-                ? dhitController.CreateSettingsSnapshot()
-                : null;
+        DhitSettings snapshot = dhitController != null
+            ? dhitController.CreateSettingsSnapshot()
+            : null;
 
         return new RallySettingsData
         {
             version = 5,
 
-            startPhaseIndex =
-                (int)startPhase,
+            startPhaseIndex = (int)startPhase,
+            endPhaseIndex = (int)endPhase,
+            courtSideIndex = (int)currentCourtSide,
 
-            endPhaseIndex =
-                (int)endPhase,
+            serveStartIndex = (int)selectedServeStart,
+            serveTargetIndex = (int)selectedServeTarget,
 
-            courtSideIndex =
-                (int)currentCourtSide,
+            serveTargetLeftOffset = serveTargetLeftOffset,
+            serveTargetCenterOffset = serveTargetCenterOffset,
+            serveTargetRightOffset = serveTargetRightOffset,
 
-            serveStartIndex =
-                (int)selectedServeStart,
+            receiveApexHeight = receiveApexHeight,
+            receiveBackspinRpm = receiveBackspinRpm,
+            receiveContactFixedFrames = receiveContactFixedFrames,
 
-            serveTargetIndex =
-                (int)selectedServeTarget,
+            setterLocalPosition = SetterLocalPosition,
 
-            serveTargetLeftOffset =
-                serveTargetLeftOffset,
+            tossSideIndex = (int)selectedTossSide,
+            tossTargetZOffset = tossTargetZOffset,
+            setApexHeight = setApexHeight,
+            setSpinRpm = setSpinRpm,
+            setContactFixedFrames = setContactFixedFrames,
 
-            serveTargetCenterOffset =
-                serveTargetCenterOffset,
-
-            serveTargetRightOffset =
-                serveTargetRightOffset,
-
-            receiveApexHeight =
-                receiveApexHeight,
-
-            receiveBackspinRpm =
-                receiveBackspinRpm,
-
-            receiveContactFixedFrames =
-                receiveContactFixedFrames,
-
-            setterLocalPosition =
-                SetterLocalPosition,
-
-            tossSideIndex =
-                (int)selectedTossSide,
-
-            tossTargetZOffset =
-                tossTargetZOffset,
-
-            setApexHeight =
-                setApexHeight,
-
-            setSpinRpm =
-                setSpinRpm,
-
-            setContactFixedFrames =
-                setContactFixedFrames,
-
-            spikeCourseIndex =
-                (int)selectedSpikeCourse,
-
-            spikeSpeedKmh =
-                spikeSpeedKmh,
+            spikeCourseIndex = (int)selectedSpikeCourse,
+            spikeSpeedKmh = spikeSpeedKmh,
 
             spikeTargetLeftDistanceOffsetMeters =
                 spikeTargetLeftDistanceOffsetMeters,
@@ -2035,88 +1046,47 @@ public class RallyController : MonoBehaviour
             spikeTargetRightDistanceOffsetMeters =
                 spikeTargetRightDistanceOffsetMeters,
 
-            spikeTargetLeftOffset =
-                spikeTargetLeftOffset,
+            spikeTargetLeftOffset = spikeTargetLeftOffset,
+            spikeTargetRightOffset = spikeTargetRightOffset,
 
-            spikeTargetRightOffset =
-                spikeTargetRightOffset,
-
-            blockContactFixedFrames =
-                blockContactFixedFrames,
-
-            blockExitSpeedKmh =
-                blockExitSpeedKmh,
-
-            blockSpinRpm =
-                blockSpinRpm,
+            blockContactFixedFrames = blockContactFixedFrames,
+            blockExitSpeedKmh = blockExitSpeedKmh,
+            blockSpinRpm = blockSpinRpm,
 
             blockLandingPointLeftLocalPosition =
-                GetBlockLandingPointLocalPosition(
-                    0
-                ),
+                GetBlockLandingPointLocalPosition(0),
 
             blockLandingPointRightLocalPosition =
-                GetBlockLandingPointLocalPosition(
-                    1
-                ),
+                GetBlockLandingPointLocalPosition(1),
 
-            blockLandingPointLeftOffset =
-                Vector3.zero,
+            blockLandingPointLeftOffset = Vector3.zero,
+            blockLandingPointRightOffset = Vector3.zero,
 
-            blockLandingPointRightOffset =
-                Vector3.zero,
+            tossHeight = tossHeight,
+            serveHitHeight = serveHitHeight,
+            tossForwardDistance = tossForwardDistance,
+            serveSpeedKmh = serveSpeedKmh,
+            spikeServeLaunchAngle = spikeServeLaunchAngle,
 
-            tossHeight =
-                tossHeight,
+            enableExperimentFade = enableExperimentFade,
+            serveFadeDelay = serveFadeDelay,
+            receiveFadeDelay = receiveFadeDelay,
+            tossFadeDelay = tossFadeDelay,
+            spikeFadeDelay = spikeFadeDelay,
+            blockFadeDelay = blockFadeDelay,
+            fadeDuration = fadeDuration,
 
-            serveHitHeight =
-                serveHitHeight,
-
-            tossForwardDistance =
-                tossForwardDistance,
-
-            serveSpeedKmh =
-                serveSpeedKmh,
-
-            spikeServeLaunchAngle =
-                spikeServeLaunchAngle,
-
-            enableExperimentFade =
-                enableExperimentFade,
-
-            serveFadeDelay =
-                serveFadeDelay,
-
-            receiveFadeDelay =
-                receiveFadeDelay,
-
-            tossFadeDelay =
-                tossFadeDelay,
-
-            spikeFadeDelay =
-                spikeFadeDelay,
-
-            blockFadeDelay =
-                blockFadeDelay,
-
-            fadeDuration =
-                fadeDuration,
-
-            hasDhitSettings =
-                dhitController != null,
-
-            baseShiftPixels =
-                BaseShiftPixels,
-
+            hasDhitSettings = dhitController != null,
+            baseShiftPixels = BaseShiftPixels,
             dynamicShiftEnabled =
-                dhitController != null &&
-                dhitController.IsDynamic,
-
-            dhitSettings =
-                dhitSettingsSnapshot
+                dhitController != null && dhitController.IsDynamic,
+            dhitSettings = snapshot
         };
     }
 
+    // ============================================================
+    // Apply Rally Settings
+    // ============================================================
 
     public void ApplyRallySettings(
         RallySettingsData data,
@@ -2125,112 +1095,52 @@ public class RallyController : MonoBehaviour
     {
         if (data == null)
         {
-            Debug.LogError(
-                "[RallyController] RallySettingsDataがnullです。"
-            );
-
+            Debug.LogError("[RallyController] Settings are null.");
             return;
         }
 
         startPhase =
-            (PlayPhase)Mathf.Clamp(
-                data.startPhaseIndex,
-                0,
-                4
-            );
+            (PlayPhase)Mathf.Clamp(data.startPhaseIndex, 0, 4);
 
         endPhase =
-            (PlayPhase)Mathf.Clamp(
-                data.endPhaseIndex,
-                0,
-                4
-            );
+            (PlayPhase)Mathf.Clamp(data.endPhaseIndex, 0, 4);
 
         currentCourtSide =
-            (CourtSide)Mathf.Clamp(
-                data.courtSideIndex,
-                0,
-                1
-            );
+            (CourtSide)Mathf.Clamp(data.courtSideIndex, 0, 1);
 
         selectedServeStart =
-            (ServeStartPosition)Mathf.Clamp(
-                data.serveStartIndex,
-                0,
-                2
-            );
+            (ServeStartPosition)Mathf.Clamp(data.serveStartIndex, 0, 2);
 
         selectedServeTarget =
-            (ServeTargetPosition)Mathf.Clamp(
-                data.serveTargetIndex,
-                0,
-                2
-            );
+            (ServeTargetPosition)Mathf.Clamp(data.serveTargetIndex, 0, 2);
 
-        serveTargetLeftOffset =
-            data.serveTargetLeftOffset;
+        serveTargetLeftOffset = data.serveTargetLeftOffset;
+        serveTargetCenterOffset = data.serveTargetCenterOffset;
+        serveTargetRightOffset = data.serveTargetRightOffset;
 
-        serveTargetCenterOffset =
-            data.serveTargetCenterOffset;
-
-        serveTargetRightOffset =
-            data.serveTargetRightOffset;
-
-        receiveApexHeight =
-            data.receiveApexHeight;
-
-        receiveBackspinRpm =
-            data.receiveBackspinRpm;
-
+        receiveApexHeight = data.receiveApexHeight;
+        receiveBackspinRpm = data.receiveBackspinRpm;
         receiveContactFixedFrames =
-            Mathf.Max(
-                0,
-                data.receiveContactFixedFrames
-            );
+            Mathf.Max(0, data.receiveContactFixedFrames);
 
-        if (
-            data.version >= 3 &&
-            setterPosition != null
-        )
+        if (data.version >= 3 && setterPosition != null)
         {
-            setterPosition.localPosition =
-                data.setterLocalPosition;
+            setterPosition.localPosition = data.setterLocalPosition;
         }
 
         selectedTossSide =
-            (TossSide)Mathf.Clamp(
-                data.tossSideIndex,
-                0,
-                1
-            );
+            (TossSide)Mathf.Clamp(data.tossSideIndex, 0, 1);
 
-        tossTargetZOffset =
-            data.tossTargetZOffset;
-
-        setApexHeight =
-            data.setApexHeight;
-
-        setSpinRpm =
-            data.setSpinRpm;
-
+        tossTargetZOffset = data.tossTargetZOffset;
+        setApexHeight = data.setApexHeight;
+        setSpinRpm = data.setSpinRpm;
         setContactFixedFrames =
-            Mathf.Max(
-                0,
-                data.setContactFixedFrames
-            );
+            Mathf.Max(0, data.setContactFixedFrames);
 
         selectedSpikeCourse =
-            (SpikeCourse)Mathf.Clamp(
-                data.spikeCourseIndex,
-                0,
-                1
-            );
+            (SpikeCourse)Mathf.Clamp(data.spikeCourseIndex, 0, 1);
 
-        spikeSpeedKmh =
-            Mathf.Max(
-                0.0f,
-                data.spikeSpeedKmh
-            );
+        spikeSpeedKmh = Mathf.Max(0.0f, data.spikeSpeedKmh);
 
         if (data.version >= 4)
         {
@@ -2240,49 +1150,30 @@ public class RallyController : MonoBehaviour
             spikeTargetRightDistanceOffsetMeters =
                 data.spikeTargetRightDistanceOffsetMeters;
 
-            spikeTargetLeftOffset =
-                Vector3.zero;
-
-            spikeTargetRightOffset =
-                Vector3.zero;
+            spikeTargetLeftOffset = Vector3.zero;
+            spikeTargetRightOffset = Vector3.zero;
         }
         else
         {
-            spikeTargetLeftDistanceOffsetMeters =
-                0.0f;
+            spikeTargetLeftDistanceOffsetMeters = 0.0f;
+            spikeTargetRightDistanceOffsetMeters = 0.0f;
 
-            spikeTargetRightDistanceOffsetMeters =
-                0.0f;
-
-            spikeTargetLeftOffset =
-                data.spikeTargetLeftOffset;
-
-            spikeTargetRightOffset =
-                data.spikeTargetRightOffset;
+            spikeTargetLeftOffset = data.spikeTargetLeftOffset;
+            spikeTargetRightOffset = data.spikeTargetRightOffset;
         }
 
         blockContactFixedFrames =
-            Mathf.Max(
-                0,
-                data.blockContactFixedFrames
-            );
+            Mathf.Max(0, data.blockContactFixedFrames);
 
         blockExitSpeedKmh =
-            Mathf.Max(
-                0.1f,
-                data.blockExitSpeedKmh
-            );
+            Mathf.Max(0.1f, data.blockExitSpeedKmh);
 
-        blockSpinRpm =
-            data.blockSpinRpm;
+        blockSpinRpm = data.blockSpinRpm;
 
         if (data.version >= 5)
         {
-            blockLandingPointLeftOffset =
-                Vector3.zero;
-
-            blockLandingPointRightOffset =
-                Vector3.zero;
+            blockLandingPointLeftOffset = Vector3.zero;
+            blockLandingPointRightOffset = Vector3.zero;
 
             SetBlockLandingPointLocalPosition(
                 0,
@@ -2303,68 +1194,21 @@ public class RallyController : MonoBehaviour
                 data.blockLandingPointRightOffset;
         }
 
-        tossHeight =
-            Mathf.Max(
-                0.0f,
-                data.tossHeight
-            );
-
-        serveHitHeight =
-            data.serveHitHeight;
-
+        tossHeight = Mathf.Max(0.0f, data.tossHeight);
+        serveHitHeight = data.serveHitHeight;
         tossForwardDistance =
-            Mathf.Max(
-                0.0f,
-                data.tossForwardDistance
-            );
+            Mathf.Max(0.0f, data.tossForwardDistance);
 
-        serveSpeedKmh =
-            Mathf.Max(
-                0.0f,
-                data.serveSpeedKmh
-            );
+        serveSpeedKmh = Mathf.Max(0.0f, data.serveSpeedKmh);
+        spikeServeLaunchAngle = data.spikeServeLaunchAngle;
 
-        spikeServeLaunchAngle =
-            data.spikeServeLaunchAngle;
-
-        enableExperimentFade =
-            data.enableExperimentFade;
-
-        serveFadeDelay =
-            Mathf.Max(
-                0.0f,
-                data.serveFadeDelay
-            );
-
-        receiveFadeDelay =
-            Mathf.Max(
-                0.0f,
-                data.receiveFadeDelay
-            );
-
-        tossFadeDelay =
-            Mathf.Max(
-                0.0f,
-                data.tossFadeDelay
-            );
-
-        spikeFadeDelay =
-            Mathf.Max(
-                0.0f,
-                data.spikeFadeDelay
-            );
-
-        blockFadeDelay =
-            Mathf.Max(
-                0.0f,
-                data.blockFadeDelay
-            );
-
-        fadeDuration =
-            Mathf.Max(
-                0.0f,
-                data.fadeDuration
-            );
+        enableExperimentFade = data.enableExperimentFade;
+        serveFadeDelay = Mathf.Max(0.0f, data.serveFadeDelay);
+        receiveFadeDelay = Mathf.Max(0.0f, data.receiveFadeDelay);
+        tossFadeDelay = Mathf.Max(0.0f, data.tossFadeDelay);
+        spikeFadeDelay = Mathf.Max(0.0f, data.spikeFadeDelay);
+        blockFadeDelay = Mathf.Max(0.0f, data.blockFadeDelay);
+        fadeDuration = Mathf.Max(0.0f, data.fadeDuration);
 
         if (data.hasDhitSettings)
         {
@@ -2378,369 +1222,237 @@ public class RallyController : MonoBehaviour
             }
             else if (imageController != null)
             {
-                imageController.SetShiftPixels(
-                    data.baseShiftPixels
-                );
-
-                Debug.LogWarning(
-                    "[RallyController] DHITControllerが未設定のため、" +
-                    "Base ShiftのみImageControllerへ復元しました。"
-                );
+                imageController.SetShiftPixels(data.baseShiftPixels);
             }
         }
 
         ValidateSimulationRange();
-
         ApplyCourtSide();
-
         ApplyAllServeTargetOffsets();
         ApplyAllSpikeTargetOffsets();
 
         if (data.version < 5)
-        {
             ApplyAllBlockLandingPointOffsets();
-        }
 
         ResetExperimentFade();
 
         if (resetSimulation)
-        {
             ResetSelectedSimulation();
-        }
     }
 
+    // ============================================================
+    // JSON Save / Load
+    // ============================================================
 
     public bool SaveRallyJson()
     {
-        string path =
-            RequestRallySavePath();
+        string path = RequestRallySavePath();
 
-        if (string.IsNullOrWhiteSpace(
-            path
-        ))
-        {
+        if (string.IsNullOrWhiteSpace(path))
             return false;
-        }
 
-        return SaveRallyJsonToPath(
-            path
-        );
+        return SaveRallyJsonToPath(path);
     }
-
 
     public bool LoadRallyJson()
     {
-        string path =
-            RequestRallyLoadPath();
+        string path = RequestRallyLoadPath();
 
-        if (string.IsNullOrWhiteSpace(
-            path
-        ))
-        {
+        if (string.IsNullOrWhiteSpace(path))
             return false;
-        }
 
-        return LoadRallyJsonFromPath(
-            path,
-            false
-        );
+        return LoadRallyJsonFromPath(path, false);
     }
-
 
     public bool LoadRallyJsonAndPlay()
     {
-        string path =
-            RequestRallyLoadPath();
+        string path = RequestRallyLoadPath();
 
-        if (string.IsNullOrWhiteSpace(
-            path
-        ))
-        {
+        if (string.IsNullOrWhiteSpace(path))
             return false;
-        }
 
-        return LoadRallyJsonFromPath(
-            path,
-            true
-        );
+        return LoadRallyJsonFromPath(path, true);
     }
 
-
-    public bool SaveRallyJsonToPath(
-        string path
-    )
+    public bool SaveRallyJsonToPath(string path)
     {
-        if (string.IsNullOrWhiteSpace(
-            path
-        ))
-        {
+        if (string.IsNullOrWhiteSpace(path))
             return false;
-        }
 
         try
         {
-            RallySettingsData data =
-                CreateCurrentRallySettings();
+            RallySettingsData data = CreateCurrentRallySettings();
+            string json = JsonUtility.ToJson(data, true);
 
-            string json =
-                JsonUtility.ToJson(
-                    data,
-                    true
-                );
+            string directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
 
-            string directory =
-                Path.GetDirectoryName(
-                    path
-                );
-
-            if (!string.IsNullOrWhiteSpace(
-                directory
-            ))
-            {
-                Directory.CreateDirectory(
-                    directory
-                );
-            }
-
-            File.WriteAllText(
-                path,
-                json
-            );
+            File.WriteAllText(path, json);
 
 #if UNITY_EDITOR
             UnityEditor.AssetDatabase.Refresh();
 #endif
 
-            Debug.Log(
-                "[RallyController] Rally Settings Saved\n" +
-                $"Path = {path}\n" +
-                json
-            );
-
+            Debug.Log("[RallyController] JSON Saved: " + path);
             return true;
         }
-        catch (Exception exception)
+        catch (Exception ex)
         {
             Debug.LogError(
-                "[RallyController] Rally JSON保存に失敗しました。\n" +
-                $"Path = {path}\n" +
-                exception
-            );
-
+                "[RallyController] JSON Save Failed: " + ex);
             return false;
         }
     }
-
 
     public bool LoadRallyJsonFromPath(
         string path,
         bool playAfterLoad = false
     )
     {
-        if (string.IsNullOrWhiteSpace(
-            path
-        ))
-        {
+        if (string.IsNullOrWhiteSpace(path))
             return false;
-        }
 
-        if (!File.Exists(
-            path
-        ))
+        if (!File.Exists(path))
         {
             Debug.LogError(
-                "[RallyController] Rally JSONファイルが存在しません。\n" +
-                $"Path = {path}"
-            );
-
+                "[RallyController] JSON File Not Found: " + path);
             return false;
         }
 
         try
         {
-            string json =
-                File.ReadAllText(
-                    path
-                );
+            string json = File.ReadAllText(path);
 
             RallySettingsData data =
-                JsonUtility.FromJson<RallySettingsData>(
-                    json
-                );
+                JsonUtility.FromJson<RallySettingsData>(json);
 
             if (data == null)
             {
-                Debug.LogError(
-                    "[RallyController] Rally JSONを読み込めませんでした。"
-                );
-
+                Debug.LogError("[RallyController] Invalid JSON.");
                 return false;
             }
 
-            ApplyRallySettings(
-                data,
-                true
-            );
+            ApplyRallySettings(data, true);
 
-            Debug.Log(
-                "[RallyController] Rally Settings Loaded\n" +
-                $"Path = {path}\n" +
-                $"Start = {startPhase}\n" +
-                $"End = {endPhase}\n" +
-                $"Court = {currentCourtSide}"
-            );
+            Debug.Log("[RallyController] JSON Loaded: " + path);
 
             if (playAfterLoad)
-            {
                 StartSelectedSimulation();
-            }
 
             return true;
         }
-        catch (Exception exception)
+        catch (Exception ex)
         {
             Debug.LogError(
-                "[RallyController] Rally JSON読込に失敗しました。\n" +
-                $"Path = {path}\n" +
-                exception
-            );
-
+                "[RallyController] JSON Load Failed: " + ex);
             return false;
         }
     }
 
+    // ============================================================
+    // UI Button Methods
+    // ============================================================
+
+    public void OnClickSaveRallyJson()
+    {
+        Debug.Log("[RallyController] Save button clicked.", this);
+        SaveRallyJson();
+    }
+
+    public void OnClickLoadRallyJson()
+    {
+        Debug.Log("[RallyController] Load button clicked.", this);
+        LoadRallyJson();
+    }
+
+    public void OnClickLoadRallyJsonAndPlay()
+    {
+        Debug.Log("[RallyController] Load & Play clicked.", this);
+        LoadRallyJsonAndPlay();
+    }
+
+    // ============================================================
+    // Standalone File Browser
+    // ============================================================
 
     private string RequestRallySavePath()
     {
-        string rallyDirectory =
-            GetRallyJsonDirectory();
+        Debug.Log("[RallyController] Save dialog requested.", this);
 
-#if UNITY_EDITOR
-        string fileNameWithoutExtension =
-            Path.GetFileNameWithoutExtension(
-                GetDefaultRallyJsonFileName()
-            );
-
-        string path =
-            UnityEditor.EditorUtility.SaveFilePanel(
+        try
+        {
+            string path = SFB.StandaloneFileBrowser.SaveFilePanel(
                 "Save Rally Settings",
-                rallyDirectory,
-                fileNameWithoutExtension,
+                GetRallyJsonDirectory(),
+                Path.GetFileNameWithoutExtension(
+                    GetDefaultRallyJsonFileName()
+                ),
                 "json"
             );
 
-        if (string.IsNullOrWhiteSpace(
-            path
-        ))
-        {
-            return path;
-        }
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
 
-        if (!IsPathInsideDirectory(
-            path,
-            rallyDirectory
-        ))
+            return path.EndsWith(
+                ".json", StringComparison.OrdinalIgnoreCase)
+                ? path
+                : path + ".json";
+        }
+        catch (Exception ex)
         {
             Debug.LogError(
-                "[RallyController] Rally JSONは固定フォルダ内に保存してください。\n" +
-                $"Folder = {rallyDirectory}\n" +
-                $"Selected = {path}"
-            );
-
-            return null;
+                "[RallyController] Save dialog failed: " + ex, this);
+            return string.Empty;
         }
-
-        return path;
-#else
-        return GetDefaultRallyJsonPath();
-#endif
     }
-
 
     private string RequestRallyLoadPath()
     {
-        string rallyDirectory =
-            GetRallyJsonDirectory();
+        Debug.Log("[RallyController] Load dialog requested.", this);
 
-#if UNITY_EDITOR
-        string path =
-            UnityEditor.EditorUtility.OpenFilePanel(
+        try
+        {
+            string[] paths = SFB.StandaloneFileBrowser.OpenFilePanel(
                 "Load Rally Settings",
-                rallyDirectory,
-                "json"
+                GetRallyJsonDirectory(),
+                "json",
+                false
             );
 
-        if (string.IsNullOrWhiteSpace(
-            path
-        ))
-        {
-            return path;
-        }
+            if (paths == null || paths.Length == 0)
+                return string.Empty;
 
-        if (!IsPathInsideDirectory(
-            path,
-            rallyDirectory
-        ))
+            return paths[0];
+        }
+        catch (Exception ex)
         {
             Debug.LogError(
-                "[RallyController] Rally JSONは固定フォルダ内から読み込んでください。\n" +
-                $"Folder = {rallyDirectory}\n" +
-                $"Selected = {path}"
-            );
-
-            return null;
+                "[RallyController] Load dialog failed: " + ex, this);
+            return string.Empty;
         }
-
-        return path;
-#else
-        return GetDefaultRallyJsonPath();
-#endif
     }
-
 
     public string GetRallyJsonDirectory()
     {
         string relativeFolder =
-            string.IsNullOrWhiteSpace(
-                rallyJsonRelativeFolder
-            )
-                ? Path.Combine(
-                    "Experiment",
-                    "Rallies"
-                )
+            string.IsNullOrWhiteSpace(rallyJsonRelativeFolder)
+                ? Path.Combine("Experiment", "Rallies")
                 : rallyJsonRelativeFolder.Trim()
-                    .Replace(
-                        '/',
-                        Path.DirectorySeparatorChar
-                    )
-                    .Replace(
-                        '\\',
-                        Path.DirectorySeparatorChar
-                    );
+                    .Replace('/', Path.DirectorySeparatorChar)
+                    .Replace('\\', Path.DirectorySeparatorChar);
 
 #if UNITY_EDITOR
         string directory =
-            Path.Combine(
-                Application.dataPath,
-                relativeFolder
-            );
+            Path.Combine(Application.dataPath, relativeFolder);
 #else
         string directory =
-            Path.Combine(
-                Application.persistentDataPath,
-                relativeFolder
-            );
+            Path.Combine(Application.persistentDataPath, relativeFolder);
 #endif
 
-        Directory.CreateDirectory(
-            directory
-        );
-
-        return Path.GetFullPath(
-            directory
-        );
+        Directory.CreateDirectory(directory);
+        return Path.GetFullPath(directory);
     }
-
 
     public string GetDefaultRallyJsonPath()
     {
@@ -2750,34 +1462,22 @@ public class RallyController : MonoBehaviour
         );
     }
 
-
     private static bool IsPathInsideDirectory(
         string path,
         string directory
     )
     {
-        if (
-            string.IsNullOrWhiteSpace(path) ||
-            string.IsNullOrWhiteSpace(directory)
-        )
-        {
+        if (string.IsNullOrWhiteSpace(path) ||
+            string.IsNullOrWhiteSpace(directory))
             return false;
-        }
 
-        string fullPath =
-            Path.GetFullPath(
-                path
-            );
+        string fullPath = Path.GetFullPath(path);
 
         string fullDirectory =
-            Path.GetFullPath(
-                directory
-            )
-            .TrimEnd(
+            Path.GetFullPath(directory).TrimEnd(
                 Path.DirectorySeparatorChar,
                 Path.AltDirectorySeparatorChar
-            ) +
-            Path.DirectorySeparatorChar;
+            ) + Path.DirectorySeparatorChar;
 
         return fullPath.StartsWith(
             fullDirectory,
@@ -2785,89 +1485,50 @@ public class RallyController : MonoBehaviour
         );
     }
 
-
     private string GetDefaultRallyJsonFileName()
     {
         string fileName =
-            string.IsNullOrWhiteSpace(
-                defaultRallyJsonFileName
-            )
+            string.IsNullOrWhiteSpace(defaultRallyJsonFileName)
                 ? "rally_settings.json"
                 : defaultRallyJsonFileName.Trim();
 
         if (!fileName.EndsWith(
-            ".json",
-            StringComparison.OrdinalIgnoreCase
-        ))
-        {
+            ".json", StringComparison.OrdinalIgnoreCase))
             fileName += ".json";
-        }
 
         return fileName;
     }
 
-
     // ============================================================
-    // External Control
+    // Serve UI
     // ============================================================
 
-    public void SetServeStart(
-        int index
-    )
+    public void SetServeStart(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                2
-            );
-
         selectedServeStart =
-            (ServeStartPosition)index;
+            (ServeStartPosition)Mathf.Clamp(index, 0, 2);
     }
 
-    public void SetServeStartAndRespawn(
-        int index
-    )
+    public void SetServeStartAndRespawn(int index)
     {
-        SetServeStart(
-            index
-        );
-
+        SetServeStart(index);
         SpawnBallAtSelectedStart();
     }
 
-    public void SetServeTarget(
-        int index
-    )
+    public void SetServeTarget(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                2
-            );
-
         selectedServeTarget =
-            (ServeTargetPosition)index;
+            (ServeTargetPosition)Mathf.Clamp(index, 0, 2);
     }
 
-    public void SetServeTargetOffset(
-        int index,
-        Vector3 offset
-    )
+    public void SetServeTargetOffset(int index, Vector3 offset)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                2
-            );
+        index = Mathf.Clamp(index, 0, 2);
 
-        ServeTargetPosition targetPosition =
+        ServeTargetPosition target =
             (ServeTargetPosition)index;
 
-        switch (targetPosition)
+        switch (target)
         {
             case ServeTargetPosition.Left:
                 serveTargetLeftOffset = offset;
@@ -2882,23 +1543,12 @@ public class RallyController : MonoBehaviour
                 break;
         }
 
-        ApplyServeTargetOffset(
-            targetPosition
-        );
+        ApplyServeTargetOffset(target);
     }
 
-    public Vector3 GetServeTargetOffset(
-        int index
-    )
+    public Vector3 GetServeTargetOffset(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                2
-            );
-
-        switch ((ServeTargetPosition)index)
+        switch ((ServeTargetPosition)Mathf.Clamp(index, 0, 2))
         {
             case ServeTargetPosition.Left:
                 return serveTargetLeftOffset;
@@ -2916,659 +1566,341 @@ public class RallyController : MonoBehaviour
 
     public void ResetServeTargetOffsets()
     {
-        serveTargetLeftOffset =
-            Vector3.zero;
-
-        serveTargetCenterOffset =
-            Vector3.zero;
-
-        serveTargetRightOffset =
-            Vector3.zero;
+        serveTargetLeftOffset = Vector3.zero;
+        serveTargetCenterOffset = Vector3.zero;
+        serveTargetRightOffset = Vector3.zero;
 
         ApplyAllServeTargetOffsets();
     }
 
-    public void SetSetterLocalPosition(
-        Vector3 localPosition
-    )
+    // ============================================================
+    // Setter UI
+    // ============================================================
+
+    public void SetSetterLocalPosition(Vector3 localPosition)
     {
         if (setterPosition == null)
         {
-            Debug.LogWarning(
-                "[RallyController] Setter Positionが設定されていません。",
-                this
-            );
-
+            Debug.LogWarning("[RallyController] Setter is null.", this);
             return;
         }
 
-        setterPosition.localPosition =
-            localPosition;
+        setterPosition.localPosition = localPosition;
     }
 
-    public void SetTossSide(
-        int index
-    )
+    public void SetTossSide(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
-
-        selectedTossSide =
-            (TossSide)index;
-
+        selectedTossSide = (TossSide)Mathf.Clamp(index, 0, 1);
         ApplyAllSpikeTargetOffsets();
     }
 
-    public void SetTossTargetZOffset(
-        float offset
-    )
+    public void SetTossTargetZOffset(float offset)
     {
-        tossTargetZOffset =
-            offset;
-
+        tossTargetZOffset = offset;
         ApplyAllSpikeTargetOffsets();
     }
 
-    public void SetSetApexHeight(
-        float height
-    )
+    public void SetSetApexHeight(float height)
     {
-        setApexHeight =
-            height;
+        setApexHeight = height;
     }
 
-    public void SetSetSpinRpm(
-        float rpm
-    )
+    public void SetSetSpinRpm(float rpm)
     {
-        setSpinRpm =
-            rpm;
+        setSpinRpm = rpm;
     }
 
-    public void SetSetContactFixedFrames(
-        int frames
-    )
+    public void SetSetContactFixedFrames(int frames)
     {
-        setContactFixedFrames =
-            Mathf.Max(
-                0,
-                frames
-            );
+        setContactFixedFrames = Mathf.Max(0, frames);
     }
 
-    public void SetSpikeCourse(
-        int index
-    )
-    {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
+    // ============================================================
+    // Spike UI
+    // ============================================================
 
+    public void SetSpikeCourse(int index)
+    {
         selectedSpikeCourse =
-            (SpikeCourse)index;
+            (SpikeCourse)Mathf.Clamp(index, 0, 1);
     }
-
-
-    // ============================================================
-    // Spike Target Distance
-    // ============================================================
 
     public void SetSpikeTargetDistanceOffset(
         int index,
         float distanceMeters
     )
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
+        index = Mathf.Clamp(index, 0, 1);
 
         if (index == 0)
         {
-            spikeTargetLeftDistanceOffsetMeters =
-                distanceMeters;
-
-            spikeTargetLeftOffset =
-                Vector3.zero;
+            spikeTargetLeftDistanceOffsetMeters = distanceMeters;
+            spikeTargetLeftOffset = Vector3.zero;
         }
         else
         {
-            spikeTargetRightDistanceOffsetMeters =
-                distanceMeters;
-
-            spikeTargetRightOffset =
-                Vector3.zero;
+            spikeTargetRightDistanceOffsetMeters = distanceMeters;
+            spikeTargetRightOffset = Vector3.zero;
         }
 
-        ApplySpikeTargetOffset(
-            index
-        );
+        ApplySpikeTargetOffset(index);
     }
 
-
-    public float GetSpikeTargetDistanceOffset(
-        int index
-    )
+    public float GetSpikeTargetDistanceOffset(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
-
-        return
-            index == 0
-                ? spikeTargetLeftDistanceOffsetMeters
-                : spikeTargetRightDistanceOffsetMeters;
+        return Mathf.Clamp(index, 0, 1) == 0
+            ? spikeTargetLeftDistanceOffsetMeters
+            : spikeTargetRightDistanceOffsetMeters;
     }
 
-
-    // ============================================================
-    // Legacy Spike Target XYZ Offset
-    // ============================================================
-
-    public void SetSpikeTargetOffset(
-        int index,
-        Vector3 offset
-    )
+    public void SetSpikeTargetOffset(int index, Vector3 offset)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
+        index = Mathf.Clamp(index, 0, 1);
 
         if (index == 0)
         {
-            spikeTargetLeftDistanceOffsetMeters =
-                0.0f;
-
-            spikeTargetLeftOffset =
-                offset;
+            spikeTargetLeftDistanceOffsetMeters = 0.0f;
+            spikeTargetLeftOffset = offset;
         }
         else
         {
-            spikeTargetRightDistanceOffsetMeters =
-                0.0f;
-
-            spikeTargetRightOffset =
-                offset;
+            spikeTargetRightDistanceOffsetMeters = 0.0f;
+            spikeTargetRightOffset = offset;
         }
 
-        ApplySpikeTargetOffset(
-            index
-        );
+        ApplySpikeTargetOffset(index);
     }
 
-
-    public Vector3 GetSpikeTargetOffset(
-        int index
-    )
+    public Vector3 GetSpikeTargetOffset(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
-
-        return
-            index == 0
-                ? spikeTargetLeftOffset
-                : spikeTargetRightOffset;
+        return Mathf.Clamp(index, 0, 1) == 0
+            ? spikeTargetLeftOffset
+            : spikeTargetRightOffset;
     }
-
 
     public void ResetSpikeTargetOffsets()
     {
-        spikeTargetLeftDistanceOffsetMeters =
-            0.0f;
-
-        spikeTargetRightDistanceOffsetMeters =
-            0.0f;
-
-        spikeTargetLeftOffset =
-            Vector3.zero;
-
-        spikeTargetRightOffset =
-            Vector3.zero;
+        spikeTargetLeftDistanceOffsetMeters = 0.0f;
+        spikeTargetRightDistanceOffsetMeters = 0.0f;
+        spikeTargetLeftOffset = Vector3.zero;
+        spikeTargetRightOffset = Vector3.zero;
 
         ApplyAllSpikeTargetOffsets();
     }
 
-
     // ============================================================
-    // Block
+    // Block UI
     // ============================================================
 
-    public void SetBlockMode(
-        int index
-    )
+    public void SetBlockMode(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
-
-        endPhase =
-            index == 1
-                ? PlayPhase.Block
-                : PlayPhase.Spike;
+        endPhase = Mathf.Clamp(index, 0, 1) == 1
+            ? PlayPhase.Block
+            : PlayPhase.Spike;
 
         ValidateSimulationRange();
     }
 
-    public void SetBlockEnabled(
-        bool enabled
-    )
+    public void SetBlockEnabled(bool enabled)
     {
-        endPhase =
-            enabled
-                ? PlayPhase.Block
-                : PlayPhase.Spike;
+        endPhase = enabled
+            ? PlayPhase.Block
+            : PlayPhase.Spike;
 
         ValidateSimulationRange();
     }
 
-    public void SetBlockContactFixedFrames(
-        int frames
-    )
+    public void SetBlockContactFixedFrames(int frames)
     {
-        blockContactFixedFrames =
-            Mathf.Max(
-                0,
-                frames
-            );
+        blockContactFixedFrames = Mathf.Max(0, frames);
     }
 
-    public void SetBlockExitSpeed(
-        float speedKmh
-    )
+    public void SetBlockExitSpeed(float speedKmh)
     {
-        blockExitSpeedKmh =
-            Mathf.Max(
-                0.1f,
-                speedKmh
-            );
+        blockExitSpeedKmh = Mathf.Max(0.1f, speedKmh);
     }
 
-    public void SetBlockSpinRpm(
-        float rpm
-    )
+    public void SetBlockSpinRpm(float rpm)
     {
-        blockSpinRpm =
-            rpm;
+        blockSpinRpm = rpm;
     }
-
-
-    // ============================================================
-    // Block Landing Point Local Position
-    // ============================================================
 
     public void SetBlockLandingPointLocalPosition(
         int index,
         Vector3 localPosition
     )
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
+        index = Mathf.Clamp(index, 0, 1);
 
-        Transform target =
-            index == 0
-                ? blockLandingPointLeft
-                : blockLandingPointRight;
+        Transform target = index == 0
+            ? blockLandingPointLeft
+            : blockLandingPointRight;
 
         if (target == null)
         {
             Debug.LogWarning(
-                "[RallyController] " +
-                $"Block Landing Point {(index == 0 ? "Left" : "Right")} " +
-                "が設定されていません。",
-                this
-            );
-
+                "[RallyController] Block Landing Point is null.", this);
             return;
         }
 
-        target.localPosition =
-            localPosition;
+        target.localPosition = localPosition;
 
         if (index == 0)
-        {
-            blockLandingPointLeftOffset =
-                Vector3.zero;
-        }
+            blockLandingPointLeftOffset = Vector3.zero;
         else
-        {
-            blockLandingPointRightOffset =
-                Vector3.zero;
-        }
+            blockLandingPointRightOffset = Vector3.zero;
     }
 
-
-    public Vector3 GetBlockLandingPointLocalPosition(
-        int index
-    )
+    public Vector3 GetBlockLandingPointLocalPosition(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
+        Transform target = Mathf.Clamp(index, 0, 1) == 0
+            ? blockLandingPointLeft
+            : blockLandingPointRight;
 
-        Transform target =
-            index == 0
-                ? blockLandingPointLeft
-                : blockLandingPointRight;
-
-        return
-            target != null
-                ? target.localPosition
-                : Vector3.zero;
+        return target != null
+            ? target.localPosition
+            : Vector3.zero;
     }
 
-
-    // ============================================================
-    // Legacy Block Landing Point Offset
-    // ============================================================
-
-    public void SetBlockLandingPointOffset(
-        int index,
-        Vector3 offset
-    )
+    public void SetBlockLandingPointOffset(int index, Vector3 offset)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
+        index = Mathf.Clamp(index, 0, 1);
 
         if (index == 0)
-        {
-            blockLandingPointLeftOffset =
-                offset;
-        }
+            blockLandingPointLeftOffset = offset;
         else
-        {
-            blockLandingPointRightOffset =
-                offset;
-        }
+            blockLandingPointRightOffset = offset;
 
-        ApplyBlockLandingPointOffset(
-            index
-        );
+        ApplyBlockLandingPointOffset(index);
     }
 
-
-    public Vector3 GetBlockLandingPointOffset(
-        int index
-    )
+    public Vector3 GetBlockLandingPointOffset(int index)
     {
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
-
-        return
-            index == 0
-                ? blockLandingPointLeftOffset
-                : blockLandingPointRightOffset;
+        return Mathf.Clamp(index, 0, 1) == 0
+            ? blockLandingPointLeftOffset
+            : blockLandingPointRightOffset;
     }
-
 
     public void ResetBlockLandingPointOffsets()
     {
-        blockLandingPointLeftOffset =
-            Vector3.zero;
-
-        blockLandingPointRightOffset =
-            Vector3.zero;
-
+        blockLandingPointLeftOffset = Vector3.zero;
+        blockLandingPointRightOffset = Vector3.zero;
         ApplyAllBlockLandingPointOffsets();
     }
-
 
     // ============================================================
     // Other Parameters
     // ============================================================
 
-    public void SetSpikeSpeed(
-        float speedKmh
-    )
+    public void SetSpikeSpeed(float speedKmh)
     {
-        spikeSpeedKmh =
-            Mathf.Max(
-                0.0f,
-                speedKmh
-            );
+        spikeSpeedKmh = Mathf.Max(0.0f, speedKmh);
     }
 
-    public void SetServeSpeed(
-        float speedKmh
-    )
+    public void SetServeSpeed(float speedKmh)
     {
-        serveSpeedKmh =
-            Mathf.Max(
-                0.0f,
-                speedKmh
-            );
+        serveSpeedKmh = Mathf.Max(0.0f, speedKmh);
     }
 
-    public void SetSpikeServeLaunchAngle(
-        float angleDeg
-    )
+    public void SetSpikeServeLaunchAngle(float angleDeg)
     {
-        spikeServeLaunchAngle =
-            angleDeg;
+        spikeServeLaunchAngle = angleDeg;
     }
 
-    public void SetTossHeight(
-        float height
-    )
+    public void SetTossHeight(float height)
     {
-        tossHeight =
-            Mathf.Max(
-                0.0f,
-                height
-            );
+        tossHeight = Mathf.Max(0.0f, height);
     }
 
-    public void SetServeHitHeight(
-        float height
-    )
+    public void SetServeHitHeight(float height)
     {
-        serveHitHeight =
-            height;
+        serveHitHeight = height;
     }
 
-    public void SetTossForwardDistance(
-        float distance
-    )
+    public void SetTossForwardDistance(float distance)
     {
-        tossForwardDistance =
-            Mathf.Max(
-                0.0f,
-                distance
-            );
+        tossForwardDistance = Mathf.Max(0.0f, distance);
     }
 
-    public void SetReceiveApexHeight(
-        float height
-    )
+    public void SetReceiveApexHeight(float height)
     {
-        receiveApexHeight =
-            height;
+        receiveApexHeight = height;
     }
 
-    public void SetReceiveBackspinRpm(
-        float rpm
-    )
+    public void SetReceiveBackspinRpm(float rpm)
     {
-        receiveBackspinRpm =
-            rpm;
+        receiveBackspinRpm = rpm;
     }
 
-    public void SetReceiveContactFixedFrames(
-        int frames
-    )
+    public void SetReceiveContactFixedFrames(int frames)
     {
-        receiveContactFixedFrames =
-            Mathf.Max(
-                0,
-                frames
-            );
+        receiveContactFixedFrames = Mathf.Max(0, frames);
     }
-
 
     // ============================================================
-    // Experiment Fade Control
+    // Experiment Fade UI
     // ============================================================
 
-    public void SetExperimentFadeEnabled(
-        bool enabled
-    )
+    public void SetExperimentFadeEnabled(bool enabled)
     {
-        enableExperimentFade =
-            enabled;
+        enableExperimentFade = enabled;
 
         if (!enableExperimentFade)
-        {
             ResetExperimentFade();
-        }
     }
 
-    public void SetServeFadeDelay(
-        float seconds
-    )
+    public void SetServeFadeDelay(float seconds)
     {
-        serveFadeDelay =
-            Mathf.Max(
-                0.0f,
-                seconds
-            );
+        serveFadeDelay = Mathf.Max(0.0f, seconds);
     }
 
-    public void SetReceiveFadeDelay(
-        float seconds
-    )
+    public void SetReceiveFadeDelay(float seconds)
     {
-        receiveFadeDelay =
-            Mathf.Max(
-                0.0f,
-                seconds
-            );
+        receiveFadeDelay = Mathf.Max(0.0f, seconds);
     }
 
-    public void SetTossFadeDelay(
-        float seconds
-    )
+    public void SetTossFadeDelay(float seconds)
     {
-        tossFadeDelay =
-            Mathf.Max(
-                0.0f,
-                seconds
-            );
+        tossFadeDelay = Mathf.Max(0.0f, seconds);
     }
 
-    public void SetSpikeFadeDelay(
-        float seconds
-    )
+    public void SetSpikeFadeDelay(float seconds)
     {
-        spikeFadeDelay =
-            Mathf.Max(
-                0.0f,
-                seconds
-            );
+        spikeFadeDelay = Mathf.Max(0.0f, seconds);
     }
 
-    public void SetBlockFadeDelay(
-        float seconds
-    )
+    public void SetBlockFadeDelay(float seconds)
     {
-        blockFadeDelay =
-            Mathf.Max(
-                0.0f,
-                seconds
-            );
+        blockFadeDelay = Mathf.Max(0.0f, seconds);
     }
 
-    public void SetFadeDuration(
-        float seconds
-    )
+    public void SetFadeDuration(float seconds)
     {
-        fadeDuration =
-            Mathf.Max(
-                0.0f,
-                seconds
-            );
+        fadeDuration = Mathf.Max(0.0f, seconds);
     }
 
-    private void NotifyPhaseStarted(
-        PlayPhase phase
-    )
+    // ============================================================
+    // Experiment Fade
+    // ============================================================
+
+    private void NotifyPhaseStarted(PlayPhase phase)
     {
-        if (!enableExperimentFade)
-        {
+        if (!enableExperimentFade || phase != endPhase)
             return;
-        }
-
-        if (phase != endPhase)
-        {
-            return;
-        }
 
         if (imageController == null)
         {
             Debug.LogWarning(
-                "[RallyController] Experiment Fade用の" +
-                "ImageControllerが設定されていません。"
-            );
-
+                "[RallyController] Fade ImageController is null.");
             return;
         }
 
         CancelExperimentFadeTimer();
 
-        float delay =
-            GetFadeDelay(
-                phase
-            );
+        float delay = GetFadeDelay(phase);
 
         experimentFadeTimerCoroutine =
-            StartCoroutine(
-                FadeAfterDelay(
-                    phase,
-                    delay
-                )
-            );
-
-        Debug.Log(
-            "[RallyController] Experiment Fade Scheduled\n" +
-            $"End Phase = {phase}\n" +
-            $"Delay = {delay:F3} s\n" +
-            $"Fade Duration = {fadeDuration:F3} s"
-        );
+            StartCoroutine(FadeAfterDelay(phase, delay));
     }
 
     private IEnumerator FadeAfterDelay(
@@ -3577,82 +1909,36 @@ public class RallyController : MonoBehaviour
     )
     {
         if (delay > 0.0f)
-        {
-            yield return
-                new WaitForSecondsRealtime(
-                    delay
-                );
-        }
+            yield return new WaitForSecondsRealtime(delay);
 
-        experimentFadeTimerCoroutine =
-            null;
+        experimentFadeTimerCoroutine = null;
 
-        if (!enableExperimentFade)
-        {
+        if (!enableExperimentFade ||
+            imageController == null ||
+            phase != endPhase)
             yield break;
-        }
 
-        if (imageController == null)
-        {
-            yield break;
-        }
-
-        if (phase != endPhase)
-        {
-            yield break;
-        }
-
-        imageController.FadeOut(
-            fadeDuration
-        );
-
-        Debug.Log(
-            "[RallyController] Experiment Fade Started\n" +
-            $"Phase = {phase}\n" +
-            $"Fade Duration = {fadeDuration:F3} s"
-        );
+        imageController.FadeOut(fadeDuration);
     }
 
-    private float GetFadeDelay(
-        PlayPhase phase
-    )
+    private float GetFadeDelay(PlayPhase phase)
     {
         switch (phase)
         {
             case PlayPhase.Serve:
-                return
-                    Mathf.Max(
-                        0.0f,
-                        serveFadeDelay
-                    );
+                return Mathf.Max(0.0f, serveFadeDelay);
 
             case PlayPhase.Receive:
-                return
-                    Mathf.Max(
-                        0.0f,
-                        receiveFadeDelay
-                    );
+                return Mathf.Max(0.0f, receiveFadeDelay);
 
             case PlayPhase.Toss:
-                return
-                    Mathf.Max(
-                        0.0f,
-                        tossFadeDelay
-                    );
+                return Mathf.Max(0.0f, tossFadeDelay);
 
             case PlayPhase.Spike:
-                return
-                    Mathf.Max(
-                        0.0f,
-                        spikeFadeDelay
-                    );
+                return Mathf.Max(0.0f, spikeFadeDelay);
 
             case PlayPhase.Block:
-                return
-                    Mathf.Max(
-                        0.0f,
-                        blockFadeDelay
-                    );
+                return Mathf.Max(0.0f, blockFadeDelay);
 
             default:
                 return 0.0f;
@@ -3661,34 +1947,20 @@ public class RallyController : MonoBehaviour
 
     private void CancelExperimentFadeTimer()
     {
-        if (
-            experimentFadeTimerCoroutine ==
-            null
-        )
-        {
+        if (experimentFadeTimerCoroutine == null)
             return;
-        }
 
-        StopCoroutine(
-            experimentFadeTimerCoroutine
-        );
-
-        experimentFadeTimerCoroutine =
-            null;
+        StopCoroutine(experimentFadeTimerCoroutine);
+        experimentFadeTimerCoroutine = null;
     }
 
     public void ResetExperimentFade()
     {
         CancelExperimentFadeTimer();
 
-        if (imageController == null)
-        {
-            return;
-        }
-
-        imageController.ResetFade();
+        if (imageController != null)
+            imageController.ResetFade();
     }
-
 
     // ============================================================
     // Serve Start Selection
@@ -3712,100 +1984,63 @@ public class RallyController : MonoBehaviour
         }
     }
 
-
     // ============================================================
-    // Serve Target Offset
+    // Serve Target Positions
     // ============================================================
 
     private void CacheServeTargetBasePositions()
     {
         if (serveTargetLeft != null)
-        {
             serveTargetLeftBaseLocalPosition =
                 serveTargetLeft.localPosition;
-        }
 
         if (serveTargetCenter != null)
-        {
             serveTargetCenterBaseLocalPosition =
                 serveTargetCenter.localPosition;
-        }
 
         if (serveTargetRight != null)
-        {
             serveTargetRightBaseLocalPosition =
                 serveTargetRight.localPosition;
-        }
 
-        serveTargetBasePositionsCached =
-            true;
+        serveTargetBasePositionsCached = true;
     }
 
     private void ApplyAllServeTargetOffsets()
     {
-        ApplyServeTargetOffset(
-            ServeTargetPosition.Left
-        );
-
-        ApplyServeTargetOffset(
-            ServeTargetPosition.Center
-        );
-
-        ApplyServeTargetOffset(
-            ServeTargetPosition.Right
-        );
+        ApplyServeTargetOffset(ServeTargetPosition.Left);
+        ApplyServeTargetOffset(ServeTargetPosition.Center);
+        ApplyServeTargetOffset(ServeTargetPosition.Right);
     }
 
-    private void ApplyServeTargetOffset(
-        ServeTargetPosition targetPosition
-    )
+    private void ApplyServeTargetOffset(ServeTargetPosition target)
     {
         if (!serveTargetBasePositionsCached)
-        {
             CacheServeTargetBasePositions();
-        }
 
-        switch (targetPosition)
+        switch (target)
         {
             case ServeTargetPosition.Left:
-
                 if (serveTargetLeft != null)
-                {
                     serveTargetLeft.localPosition =
                         serveTargetLeftBaseLocalPosition +
                         serveTargetLeftOffset;
-                }
-
                 break;
 
             case ServeTargetPosition.Center:
-
                 if (serveTargetCenter != null)
-                {
                     serveTargetCenter.localPosition =
                         serveTargetCenterBaseLocalPosition +
                         serveTargetCenterOffset;
-                }
-
                 break;
 
             case ServeTargetPosition.Right:
-
                 if (serveTargetRight != null)
-                {
                     serveTargetRight.localPosition =
                         serveTargetRightBaseLocalPosition +
                         serveTargetRightOffset;
-                }
-
                 break;
         }
     }
-
-
-    // ============================================================
-    // Receiver Selection
-    // ============================================================
 
     private Transform GetSelectedServeTarget()
     {
@@ -3825,283 +2060,168 @@ public class RallyController : MonoBehaviour
         }
     }
 
-
     // ============================================================
     // Toss Target Selection
     // ============================================================
 
     private Transform GetSelectedTossTarget()
     {
-        switch (selectedTossSide)
-        {
-            case TossSide.Left:
-                return leftTossTarget;
-
-            case TossSide.Right:
-                return rightTossTarget;
-
-            default:
-                return leftTossTarget;
-        }
+        return selectedTossSide == TossSide.Left
+            ? leftTossTarget
+            : rightTossTarget;
     }
 
     private Vector3 GetSelectedTossTargetPosition()
     {
-        Transform tossTarget =
-            GetSelectedTossTarget();
+        Transform target = GetSelectedTossTarget();
 
-        if (tossTarget == null)
-        {
+        if (target == null)
             return Vector3.zero;
-        }
 
-        Vector3 zDirection =
-            Vector3.forward;
+        Vector3 zDirection = Vector3.forward;
 
         if (playRoot != null)
-        {
             zDirection =
-                playRoot.TransformDirection(
-                    Vector3.forward
-                );
-        }
+                playRoot.TransformDirection(Vector3.forward);
 
-        return
-            tossTarget.position +
-            zDirection *
-            tossTargetZOffset;
+        return target.position +
+            zDirection * tossTargetZOffset;
     }
 
-
     // ============================================================
-    // Spike Target
+    // Spike Target Positions
     // ============================================================
 
     private void CacheSpikeTargetBasePositions()
     {
         if (spikeTargetLeft != null)
-        {
             spikeTargetLeftBaseLocalPosition =
                 spikeTargetLeft.localPosition;
-        }
 
         if (spikeTargetRight != null)
-        {
             spikeTargetRightBaseLocalPosition =
                 spikeTargetRight.localPosition;
-        }
 
-        spikeTargetBasePositionsCached =
-            true;
+        spikeTargetBasePositionsCached = true;
     }
 
     private void ApplyAllSpikeTargetOffsets()
     {
-        ApplySpikeTargetOffset(
-            0
-        );
-
-        ApplySpikeTargetOffset(
-            1
-        );
+        ApplySpikeTargetOffset(0);
+        ApplySpikeTargetOffset(1);
     }
 
-    private void ApplySpikeTargetOffset(
-        int index
-    )
+    private void ApplySpikeTargetOffset(int index)
     {
         if (!spikeTargetBasePositionsCached)
-        {
             CacheSpikeTargetBasePositions();
-        }
 
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
+        index = Mathf.Clamp(index, 0, 1);
 
-        Transform spikeTarget =
-            index == 0
-                ? spikeTargetLeft
-                : spikeTargetRight;
+        Transform target = index == 0
+            ? spikeTargetLeft
+            : spikeTargetRight;
 
-        if (spikeTarget == null)
+        if (target == null)
+            return;
+
+        Vector3 baseLocal = index == 0
+            ? spikeTargetLeftBaseLocalPosition
+            : spikeTargetRightBaseLocalPosition;
+
+        Vector3 legacyOffset = index == 0
+            ? spikeTargetLeftOffset
+            : spikeTargetRightOffset;
+
+        float distanceOffset = index == 0
+            ? spikeTargetLeftDistanceOffsetMeters
+            : spikeTargetRightDistanceOffsetMeters;
+
+        Vector3 localPosition = baseLocal + legacyOffset;
+
+        Transform parent = target.parent;
+
+        Vector3 worldPosition = parent != null
+            ? parent.TransformPoint(localPosition)
+            : localPosition;
+
+        if (Mathf.Abs(distanceOffset) <= 0.000001f)
         {
+            target.localPosition = localPosition;
             return;
         }
 
-        Vector3 baseLocalPosition =
-            index == 0
-                ? spikeTargetLeftBaseLocalPosition
-                : spikeTargetRightBaseLocalPosition;
-
-        Vector3 legacyLocalOffset =
-            index == 0
-                ? spikeTargetLeftOffset
-                : spikeTargetRightOffset;
-
-        float distanceOffsetMeters =
-            index == 0
-                ? spikeTargetLeftDistanceOffsetMeters
-                : spikeTargetRightDistanceOffsetMeters;
-
-        Vector3 baseWithLegacyLocalPosition =
-            baseLocalPosition +
-            legacyLocalOffset;
-
-        Transform parent =
-            spikeTarget.parent;
-
-        Vector3 baseWorldPosition =
-            parent != null
-                ? parent.TransformPoint(
-                    baseWithLegacyLocalPosition
-                )
-                : baseWithLegacyLocalPosition;
-
-        if (
-            Mathf.Abs(
-                distanceOffsetMeters
-            ) <= 0.000001f
-        )
-        {
-            spikeTarget.localPosition =
-                baseWithLegacyLocalPosition;
-
-            return;
-        }
-
-        Vector3 spikeContactWorldPosition =
+        Vector3 contactPosition =
             GetSelectedTossTargetPosition();
 
-        Vector3 trajectoryDirection =
-            baseWorldPosition -
-            spikeContactWorldPosition;
+        Vector3 direction = worldPosition - contactPosition;
+        direction.y = 0.0f;
 
-        trajectoryDirection.y =
-            0.0f;
-
-        if (
-            trajectoryDirection.sqrMagnitude <=
-            0.000001f
-        )
+        if (direction.sqrMagnitude <= 0.000001f)
         {
             Debug.LogWarning(
-                "[RallyController] " +
-                "Spike Target Distance Offsetの方向を計算できません。\n" +
-                $"Target Index = {index}\n" +
-                $"Spike Contact = {spikeContactWorldPosition}\n" +
-                $"Base Target = {baseWorldPosition}",
-                this
-            );
-
-            spikeTarget.localPosition =
-                baseWithLegacyLocalPosition;
-
+                "[RallyController] Invalid Spike Target direction.", this);
+            target.localPosition = localPosition;
             return;
         }
 
-        trajectoryDirection.Normalize();
+        direction.Normalize();
 
-        Vector3 finalWorldPosition =
-            baseWorldPosition +
-            trajectoryDirection *
-            distanceOffsetMeters;
+        Vector3 finalWorld =
+            worldPosition + direction * distanceOffset;
 
-        finalWorldPosition.y =
-            baseWorldPosition.y;
+        finalWorld.y = worldPosition.y;
 
         if (parent != null)
-        {
-            spikeTarget.localPosition =
-                parent.InverseTransformPoint(
-                    finalWorldPosition
-                );
-        }
+            target.localPosition =
+                parent.InverseTransformPoint(finalWorld);
         else
-        {
-            spikeTarget.position =
-                finalWorldPosition;
-        }
+            target.position = finalWorld;
     }
-
-
-    // ============================================================
-    // Spike Target Selection
-    // ============================================================
 
     private Transform GetSelectedSpikeTarget()
     {
-        if (
-            selectedTossSide ==
-            TossSide.Left
-        )
+        if (selectedTossSide == TossSide.Left)
         {
-            return
-                selectedSpikeCourse ==
-                SpikeCourse.Straight
-                    ? spikeTargetRight
-                    : spikeTargetLeft;
+            return selectedSpikeCourse == SpikeCourse.Straight
+                ? spikeTargetRight
+                : spikeTargetLeft;
         }
 
-        return
-            selectedSpikeCourse ==
-            SpikeCourse.Straight
-                ? spikeTargetLeft
-                : spikeTargetRight;
+        return selectedSpikeCourse == SpikeCourse.Straight
+            ? spikeTargetLeft
+            : spikeTargetRight;
     }
 
-
     // ============================================================
-    // Legacy Block Landing Point Offset
+    // Block Landing Points
     // ============================================================
 
     private void CacheBlockLandingPointBasePositions()
     {
         if (blockLandingPointLeft != null)
-        {
             blockLandingPointLeftBaseLocalPosition =
                 blockLandingPointLeft.localPosition;
-        }
 
         if (blockLandingPointRight != null)
-        {
             blockLandingPointRightBaseLocalPosition =
                 blockLandingPointRight.localPosition;
-        }
 
-        blockLandingPointBasePositionsCached =
-            true;
+        blockLandingPointBasePositionsCached = true;
     }
 
     private void ApplyAllBlockLandingPointOffsets()
     {
-        ApplyBlockLandingPointOffset(
-            0
-        );
-
-        ApplyBlockLandingPointOffset(
-            1
-        );
+        ApplyBlockLandingPointOffset(0);
+        ApplyBlockLandingPointOffset(1);
     }
 
-    private void ApplyBlockLandingPointOffset(
-        int index
-    )
+    private void ApplyBlockLandingPointOffset(int index)
     {
         if (!blockLandingPointBasePositionsCached)
-        {
             CacheBlockLandingPointBasePositions();
-        }
 
-        index =
-            Mathf.Clamp(
-                index,
-                0,
-                1
-            );
+        index = Mathf.Clamp(index, 0, 1);
 
         if (index == 0)
         {
@@ -4123,67 +2243,27 @@ public class RallyController : MonoBehaviour
         }
     }
 
-
-    // ============================================================
-    // Block Point Selection
-    // ============================================================
-
     private Transform GetSelectedBlockContactPoint()
     {
-        return
-            selectedTossSide ==
-            TossSide.Left
-                ? blockContactPointLeft
-                : blockContactPointRight;
+        return selectedTossSide == TossSide.Left
+            ? blockContactPointLeft
+            : blockContactPointRight;
     }
 
     private Transform GetSelectedBlockLandingPoint()
     {
-        return
-            selectedTossSide ==
-            TossSide.Left
-                ? blockLandingPointLeft
-                : blockLandingPointRight;
+        return selectedTossSide == TossSide.Left
+            ? blockLandingPointLeft
+            : blockLandingPointRight;
     }
 
-
     // ============================================================
-    // Event Cleanup
+    // Cleanup
     // ============================================================
-
-    private void UnbindCurrentBall()
-    {
-        if (currentBallPhysics == null)
-        {
-            return;
-        }
-
-        currentBallPhysics.OnTossApex -=
-            HandleTossApex;
-
-        currentBallPhysics.OnServeHitPoint -=
-            HandleServeHitPoint;
-
-        currentBallPhysics.OnServeReachedTarget -=
-            HandleServeReachedTarget;
-
-        currentBallPhysics.OnReceiveReachedTarget -=
-            HandleReceiveReachedTarget;
-
-        currentBallPhysics.OnSetReachedTarget -=
-            HandleSetReachedTarget;
-
-        currentBallPhysics.OnSpikeReachedTarget -=
-            HandleSpikeReachedTarget;
-
-        currentBallPhysics =
-            null;
-    }
 
     private void OnDestroy()
     {
         CancelExperimentFadeTimer();
-
         UnbindCurrentBall();
     }
 }
