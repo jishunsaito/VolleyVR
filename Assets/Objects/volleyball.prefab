@@ -10,15 +10,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 2396154e3c0d03941a96e694c2723f7a, type: 3}
       propertyPath: m_LocalScale.x
-      value: 1.2
+      value: 0.94
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 2396154e3c0d03941a96e694c2723f7a, type: 3}
       propertyPath: m_LocalScale.y
-      value: 1.2
+      value: 0.94
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 2396154e3c0d03941a96e694c2723f7a, type: 3}
       propertyPath: m_LocalScale.z
-      value: 1.2
+      value: 0.94
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 2396154e3c0d03941a96e694c2723f7a, type: 3}
       propertyPath: m_LocalPosition.x
@@ -142,7 +142,7 @@ CapsuleCollider:
   m_Enabled: 1
   serializedVersion: 2
   m_Radius: 0.11178807
-  m_Height: 0.23028453
+  m_Height: 0.2235762
   m_Direction: 1
   m_Center: {x: 0, y: -0.00000000745058, z: -0.00000000372529}
 --- !u!114 &7816359800462044745
@@ -208,3 +208,11 @@ MonoBehaviour:
   blockContactPending: 0
   blockApproachSpinAxis: {x: 1, y: 0, z: 0}
   blockApproachSpinDegreesPerSecond: 0
+  ballRadiusMeters: 0.105
+  groundY: 0
+  landingHeightTolerance: 0.02
+  courtWidthMeters: 9
+  courtLengthMeters: 18
+  courtLineWidthMeters: 0.05
+  raisedLineHeightMeters: 0.01
+  firstGroundContactReported: 0

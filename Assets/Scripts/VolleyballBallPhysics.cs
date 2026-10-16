@@ -338,6 +338,45 @@ public class VolleyballBallPhysics : MonoBehaviour
 
     private Transform currentSpikeTarget;
 
+    // ============================================================
+    // Ground detection (does not depend on collision callbacks)
+    // ============================================================
+    [Header("Ground Landing Detection")]
+    [Tooltip("Ball radius in world meters. For a 21 cm volleyball, use 0.105.")]
+    [Min(0.001f)]
+    [SerializeField] private float ballRadiusMeters = 0.105f;
+
+    [Tooltip("The height of the ground surface in world coordinates.")]
+    [SerializeField] private float groundY = 0.0f;
+
+    [Tooltip("Tolerance for physics-contact offsets; increase slightly if ground contact is never detected.")]
+    [Min(0.0f)]
+    [SerializeField] private float landingHeightTolerance = 0.02f;
+
+    [Header("Raised Court Lines")]
+    [Tooltip("Court width in world X [m].")]
+    [Min(0.01f)]
+    [SerializeField] private float courtWidthMeters = 9.0f;
+
+    [Tooltip("Court length in world Z [m].")]
+    [Min(0.01f)]
+    [SerializeField] private float courtLengthMeters = 18.0f;
+
+    [Tooltip("Width of each painted/raised court line [m].")]
+    [Min(0.0f)]
+    [SerializeField] private float courtLineWidthMeters = 0.05f;
+
+    [Tooltip("Height of the top surface of the lines above the floor [m].")]
+    [Min(0.0f)]
+    [SerializeField] private float raisedLineHeightMeters = 0.01f;
+
+    [SerializeField] private bool firstGroundContactReported = false;
+    private bool descentSeenForLanding = false;
+
+    public bool HasFirstGroundContact => firstGroundContactReported;
+    public float BallRadiusMeters => ballRadiusMeters;
+
+
 
     // ============================================================
     // Events
@@ -354,6 +393,9 @@ public class VolleyballBallPhysics : MonoBehaviour
     public event Action OnSetReachedTarget;
 
     public event Action OnSpikeReachedTarget;
+
+    // Ground point (world coordinates, y=groundY) and horizontal ball radius.
+    public event Action<Vector3, float> OnFirstGroundContact;
 
 
     // ============================================================
@@ -377,6 +419,8 @@ public class VolleyballBallPhysics : MonoBehaviour
             GetComponent<Rigidbody>();
 
         ConfigureRigidbody();
+        firstGroundContactReported = false;
+        descentSeenForLanding = false;
 
         previousPosition =
             rb.position;
@@ -502,8 +546,151 @@ public class VolleyballBallPhysics : MonoBehaviour
             UpdateBlockLanding();
         }
 
+        // Check after the movement-state updates, but before the previous
+        // position is overwritten. In Unity, rb.position is the position
+        // resulting from the previous physics simulation step.
+        CheckFirstGroundContact();
+
         previousPosition =
             rb.position;
+    }
+
+    /// <summary>
+    /// Detect the first ball-floor / ball-raised-line touch from coordinates
+    /// only (no OnCollisionEnter). World origin is the court center;
+    /// X = 9 m, Z = 18 m, with top surfaces of boundary lines 0.01 m up.
+    ///
+    /// A sphere touches a line when centerY <= lineTopY + sqrt(r*r-d*d),
+    /// where d is the XZ distance from its center to the nearest point on
+    /// the line's top rectangle. Floor contact is centerY <= floorY + r.
+    /// </summary>
+    private void CheckFirstGroundContact()
+    {
+        if (firstGroundContactReported || rb == null || rb.isKinematic)
+            return;
+
+        bool landingRelevant =
+            currentState == BallMotionState.SpikeServing ||
+            currentState == BallMotionState.AtServeTarget ||
+            currentState == BallMotionState.Spiking ||
+            currentState == BallMotionState.BlockLanding ||
+            currentState == BallMotionState.AfterSpikeTarget;
+
+        if (!landingRelevant)
+            return;
+
+        Vector3 current = rb.position;
+
+        // Keep the descent history: collision with a raised line may turn the
+        // vertical velocity upward before the next FixedUpdate callback.
+        bool descendingNow =
+            current.y < previousPosition.y - 0.000001f ||
+            rb.linearVelocity.y < -0.0001f;
+
+        if (descendingNow)
+            descentSeenForLanding = true;
+
+        if (!descentSeenForLanding)
+            return;
+
+        float currentTouchHeight = GetGroundTouchCenterHeight(
+            current, out bool currentTouchesRaisedLine);
+
+        // During descent, wait for the actual surface crossing. The small
+        // tolerance is ONLY for a ball already arrested by line/floor physics
+        // (velocity no longer points down), not an early spatial judgment.
+        if (current.y > currentTouchHeight)
+        {
+            if (descendingNow ||
+                current.y > currentTouchHeight + landingHeightTolerance)
+                return;
+        }
+
+        Vector3 landingCenter = current;
+        bool touchedRaisedLine = currentTouchesRaisedLine;
+
+        float previousTouchHeight = GetGroundTouchCenterHeight(
+            previousPosition, out _);
+
+        // If the descent crossed a contact surface during this physics step,
+        // determine the XZ landing coordinate by a short binary search.
+        if (previousPosition.y > previousTouchHeight &&
+            current.y <= currentTouchHeight)
+        {
+            float lo = 0.0f;
+            float hi = 1.0f;
+
+            for (int i = 0; i < 16; i++)
+            {
+                float mid = (lo + hi) * 0.5f;
+                Vector3 p = Vector3.Lerp(previousPosition, current, mid);
+                float surfaceHeight = GetGroundTouchCenterHeight(p, out _);
+
+                if (p.y > surfaceHeight)
+                    lo = mid;
+                else
+                    hi = mid;
+            }
+
+            landingCenter = Vector3.Lerp(previousPosition, current, hi);
+            GetGroundTouchCenterHeight(landingCenter, out touchedRaisedLine);
+        }
+
+        Vector3 groundPoint = new Vector3(
+            landingCenter.x,
+            groundY + (touchedRaisedLine ? raisedLineHeightMeters : 0.0f),
+            landingCenter.z);
+
+        firstGroundContactReported = true;
+
+        Debug.Log(
+            $"[Ball] First ground reach: " +
+            $"({groundPoint.x:F3}, {groundPoint.y:F3}, {groundPoint.z:F3}) | " +
+            $"surface={(touchedRaisedLine ? "RaisedLine" : "Floor")} | " +
+            $"radius={ballRadiusMeters:F3} m");
+
+        OnFirstGroundContact?.Invoke(groundPoint, ballRadiusMeters);
+    }
+
+    private float GetGroundTouchCenterHeight(
+        Vector3 centerWorld, out bool raisedLineIsFirst)
+    {
+        float r = Mathf.Max(0.001f, ballRadiusMeters);
+        float floorTouchHeight = groundY + r;
+        raisedLineIsFirst = false;
+
+        if (raisedLineHeightMeters <= 0.0f ||
+            courtLineWidthMeters <= 0.0f)
+            return floorTouchHeight;
+
+        float halfX = Mathf.Max(0.01f, courtWidthMeters) * 0.5f;
+        float halfZ = Mathf.Max(0.01f, courtLengthMeters) * 0.5f;
+        float halfLineWidth = courtLineWidthMeters * 0.5f;
+        float absX = Mathf.Abs(centerWorld.x);
+        float absZ = Mathf.Abs(centerWorld.z);
+
+        // Side-line strips: x = +/- halfX, z from -halfZ to +halfZ.
+        float sideDx = Mathf.Max(Mathf.Abs(absX - halfX) - halfLineWidth, 0.0f);
+        float sideDz = Mathf.Max(absZ - halfZ, 0.0f);
+        float sideD2 = sideDx * sideDx + sideDz * sideDz;
+
+        // End-line strips: z = +/- halfZ, x from -halfX to +halfX.
+        float endDx = Mathf.Max(absX - halfX, 0.0f);
+        float endDz = Mathf.Max(Mathf.Abs(absZ - halfZ) - halfLineWidth, 0.0f);
+        float endD2 = endDx * endDx + endDz * endDz;
+
+        float distanceSquared = Mathf.Min(sideD2, endD2);
+        float radiusSquared = r * r;
+
+        if (distanceSquared > radiusSquared)
+            return floorTouchHeight;
+
+        // Sphere/raised-line top-surface tangency height.
+        float lineTouchHeight = groundY + raisedLineHeightMeters +
+            Mathf.Sqrt(Mathf.Max(0.0f, radiusSquared - distanceSquared));
+
+        raisedLineIsFirst = lineTouchHeight > floorTouchHeight;
+        return Mathf.Max(floorTouchHeight, lineTouchHeight);
     }
 
 
@@ -554,6 +741,8 @@ public class VolleyballBallPhysics : MonoBehaviour
     )
     {
         StopPhysics();
+        firstGroundContactReported = false;
+        descentSeenForLanding = false;
 
         rb.position =
             position;
@@ -718,6 +907,8 @@ public class VolleyballBallPhysics : MonoBehaviour
             forwardDirection *
             forwardSpeed;
 
+        firstGroundContactReported = false;
+        descentSeenForLanding = false;
         ActivatePhysics();
 
         rb.linearVelocity =
@@ -1727,6 +1918,8 @@ public class VolleyballBallPhysics : MonoBehaviour
             false;
 
         ResetBlockRuntime();
+        firstGroundContactReported = false;
+        descentSeenForLanding = false;
 
         ActivatePhysics();
 
@@ -1906,6 +2099,8 @@ public class VolleyballBallPhysics : MonoBehaviour
 
         blockEnabledForCurrentSpike =
             true;
+        firstGroundContactReported = false;
+        descentSeenForLanding = false;
 
         currentBlockContactPoint =
             blockContactPoint;
