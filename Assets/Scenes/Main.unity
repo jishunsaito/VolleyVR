@@ -20213,7 +20213,7 @@ MonoBehaviour:
   selectedTossSide: 0
   tossTargetZOffset: 0
   setApexHeight: 4.5
-  setSpinRpm: 60
+  setSpinRpm: 0
   setContactFixedFrames: 1
   spikeTargetLeft: {fileID: 904481301}
   spikeTargetRight: {fileID: 2114283282}
