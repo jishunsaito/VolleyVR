@@ -20,76 +20,139 @@ using UnityEditor;
 /// <summary>
 /// 実験全体を管理するController。
 ///
-/// 実験進行:
+/// ============================================================
+/// Experiment Flow
+/// ============================================================
 ///
 /// READY
-/// ↓ Start Button
+///   ↓ Start
 ///
 /// IN / OUT
-/// ↓ 全Trial終了
+///   ↓ 全Trial終了
 ///
 /// REST
-/// ↓ 実験者がStart Button
+///   ↓ 実験者がStart
 ///
 /// NEAR / FAR
-/// ↓ 全Trial終了
+///   ↓ 全Trial終了
 ///
 /// FINISH
-/// ↓ 実験者がFinish Button
+///   ↓ 実験者がFinish
 ///
 /// COMPLETED
 ///
 ///
-/// Trial Source:
+/// ============================================================
+/// Trial Directory
+/// ============================================================
 ///
-/// InspectorへFolderを直接ドラッグする。
+/// InspectorにはRoot Folderだけを入れる。
+///
+/// 例:
+///
+/// Spike
+/// ├─ Front
+/// │   ├─ trial01.json
+/// │   └─ trial02.json
+/// │
+/// └─ Behind
+///     ├─ trial03.json
+///     └─ trial04.json
+///
+/// Inspector:
 ///
 /// In / Out Trial Directories
-/// Near / Far Trial Directories
+///   Element 0 = Spike
 ///
-/// 各Folder内の *.json を自動的に取得する。
+/// とするだけで、Spike以下のJSONをすべて取得する。
+///
+/// CSVのsource_directoryには
+///
+/// Spike/Front
+/// Spike/Behind
+///
+/// のようにJSONの実際の親Folderまで記録する。
 ///
 ///
-/// Trial生成:
+/// ============================================================
+/// Trial Generation
+/// ============================================================
 ///
 /// Rally JSON
 /// × Static / Dynamic
 /// × Repeat
 ///
-/// を生成し、Blockごとに独立してRandomizeする。
+/// を生成する。
+///
+/// Blockごとに独立してRandomizeする。
 ///
 ///
-/// Response:
+/// ============================================================
+/// Response
+/// ============================================================
 ///
-/// IN / OUT
+/// In / Out:
+///
 /// Left  = In
 /// Right = Out
 ///
-/// NEAR / FAR
+/// Near / Far:
+///
 /// Left  = Near
 /// Right = Far
 ///
 /// Keyboard:
+///
 /// Left  = ← / F
 /// Right = → / J
 ///
 /// Gamepad:
-/// Left  = DPad Left / L1 / West Button
-/// Right = DPad Right / R1 / East Button
+///
+/// Left  = DPad Left / L1 / West
+/// Right = DPad Right / R1 / East
 ///
 ///
-/// 正答はこのControllerでは持たない。
-/// 被験者回答だけCSVへ保存し、
-/// 実験終了後に正答を後付けする。
+/// ============================================================
+/// Correct Answer
+/// ============================================================
+///
+/// このControllerでは正答を持たない。
+///
+/// 実験時は
+///
+/// - Rally
+/// - Directory
+/// - Static / Dynamic
+/// - Response
+/// - RT
+///
+/// のみ保存する。
+///
+/// 後からCSVへ正答を追加する。
 ///
 ///
-/// UI Message:
+/// ============================================================
+/// UI
+/// ============================================================
 ///
-/// UIControllerと同様に、ScrollView内のTMP_Textへ
+/// UIControllerと同様に
 ///
-/// outputText.text = ...
+/// ScrollView
+/// └─ Viewport
+///     └─ Content
+///         └─ TMP_Text
 ///
-/// で表示する。
+/// のTMP_TextへoutputText.textで表示する。
+///
+///
+/// ============================================================
+/// Important
+/// ============================================================
+///
+/// InspectorへFolderを直接Drag & Dropする方式なので、
+/// 現在はUnity Editor上で実験することを前提とする。
+///
+/// Build版へ移行するときはStreamingAssets等へ変更する。
 /// </summary>
 public class ExperimentalController : MonoBehaviour
 {
@@ -100,17 +163,11 @@ public class ExperimentalController : MonoBehaviour
     public enum ExperimentStage
     {
         Ready = 0,
-
         InOut = 1,
-
         Rest = 2,
-
         NearFar = 3,
-
         Finish = 4,
-
         Completed = 5,
-
         Aborted = 6
     }
 
@@ -122,25 +179,20 @@ public class ExperimentalController : MonoBehaviour
     private enum TrialState
     {
         None = 0,
-
         Preparing = 1,
-
         Playing = 2,
-
         AwaitingResponse = 3,
-
         InterTrial = 4
     }
 
 
     // ============================================================
-    // Response Side
+    // Response
     // ============================================================
 
     private enum ResponseSide
     {
         Left = 0,
-
         Right = 1
     }
 
@@ -153,9 +205,20 @@ public class ExperimentalController : MonoBehaviour
     {
         public ExperimentStage stage;
 
-        public string directoryName;
+        /// <summary>
+        /// Inspectorへ入れたRoot Folder。
+        /// 例: Spike
+        /// </summary>
+        public string rootDirectoryName;
 
-        public string directoryPath;
+        /// <summary>
+        /// JSONが実際に存在するFolder。
+        ///
+        /// 例:
+        /// Spike/Front
+        /// Spike/Behind
+        /// </summary>
+        public string sourceDirectory;
 
         public string rallyFileName;
 
@@ -176,12 +239,17 @@ public class ExperimentalController : MonoBehaviour
     [SerializeField]
     private RallyController rallyController;
 
+
+    [Tooltip(
+        "Static / Dynamic HITを管理するDHITController。\n" +
+        "Rally JSON Load後にTrial条件を上書きする。"
+    )]
     [SerializeField]
     private DHITController dhitController;
 
+
     [Tooltip(
-        "Fade完了判定に使用する。\n" +
-        "FadeAmountが1になったら回答受付を開始する。"
+        "Fade完了判定に使用するImageController。"
     )]
     [SerializeField]
     private ImageController imageController;
@@ -195,6 +263,7 @@ public class ExperimentalController : MonoBehaviour
 
     [SerializeField]
     private GameObject mainPanel;
+
 
     [SerializeField]
     private GameObject experimentPanel;
@@ -214,25 +283,23 @@ public class ExperimentalController : MonoBehaviour
 
 
     [Tooltip(
-        "READY時:\n" +
-        "In / Out試行開始\n\n" +
-        "REST時:\n" +
-        "Near / Far試行開始"
+        "READYではIn / Out開始。\n" +
+        "RESTではNear / Far開始。"
     )]
     [SerializeField]
     private Button startButton;
 
 
     [Tooltip(
-        "FINISH表示後に実験者が押すButton"
+        "全試行終了後に実験者が押すButton"
     )]
     [SerializeField]
     private Button finishButton;
 
 
     [Tooltip(
-        "実験途中で中断するButton。\n" +
-        "不要なら未設定でもよい。"
+        "途中中断Button。\n" +
+        "不要ならnullでもよい。"
     )]
     [SerializeField]
     private Button abortButton;
@@ -240,7 +307,7 @@ public class ExperimentalController : MonoBehaviour
 
     [Tooltip(
         "実験開始前にMain Panelへ戻るButton。\n" +
-        "不要なら未設定でもよい。"
+        "不要ならnullでもよい。"
     )]
     [SerializeField]
     private Button backButton;
@@ -253,30 +320,30 @@ public class ExperimentalController : MonoBehaviour
     [Header("UI")]
 
     [Tooltip(
-        "UIControllerのOutput Textと同じ。\n" +
-        "ScrollView / Viewport / Content内のTMP_Textを設定する。"
+        "ScrollViewのContent内にあるTMP_Text"
     )]
     [SerializeField]
     private TMP_Text outputText;
 
 
     [Tooltip(
-        "被験者ID入力欄。\n" +
-        "未設定ならParticipantとして保存する。"
+        "被験者ID入力欄"
     )]
     [SerializeField]
     private TMP_InputField participantIdInputField;
 
 
     // ============================================================
-    // In / Out Trial Directories
+    // In / Out Directories
     // ============================================================
 
     [Header("In / Out Trial Directories")]
 
     [Tooltip(
-        "Project WindowからFolderを直接ドラッグする。\n" +
-        "Folder内のJSONをIn / Out Trialとして使用する。"
+        "Root Folderを入れる。\n\n" +
+        "例:\n" +
+        "Spike\n\n" +
+        "Spike/FrontやSpike/Behind以下も自動検索する。"
     )]
     [SerializeField]
     private List<UnityEngine.Object> inOutTrialDirectories =
@@ -284,14 +351,14 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Near / Far Trial Directories
+    // Near / Far Directories
     // ============================================================
 
     [Header("Near / Far Trial Directories")]
 
     [Tooltip(
-        "Project WindowからFolderを直接ドラッグする。\n" +
-        "Folder内のJSONをNear / Far Trialとして使用する。"
+        "Root Folderを入れる。\n\n" +
+        "そのFolder以下を再帰的に検索する。"
     )]
     [SerializeField]
     private List<UnityEngine.Object> nearFarTrialDirectories =
@@ -299,22 +366,13 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Directory Search
+    // JSON Search
     // ============================================================
 
-    [Header("Directory Search")]
+    [Header("JSON Search")]
 
     [Tooltip(
-        "ONなら指定Folder以下のサブFolderも検索する。\n" +
-        "通常はOFF推奨。"
-    )]
-    [SerializeField]
-    private bool includeSubdirectories =
-        false;
-
-
-    [Tooltip(
-        "Rally JSONではないため読み込まないJSONファイル名。"
+        "Rally JSONではないため除外するJSONファイル名"
     )]
     [SerializeField]
     private List<string> excludedJsonFileNames =
@@ -330,34 +388,28 @@ public class ExperimentalController : MonoBehaviour
 
     [Header("Trial Generation")]
 
-    [Tooltip(
-        "各JSONを何回繰り返すか。"
-    )]
     [Min(1)]
+    [Tooltip(
+        "各Rally × Static/Dynamicを何回繰り返すか"
+    )]
     [SerializeField]
     private int repeatCount =
         1;
 
 
-    [Tooltip(
-        "Static条件をTrialとして生成する。"
-    )]
     [SerializeField]
     private bool includeStaticCondition =
         true;
 
 
-    [Tooltip(
-        "Dynamic条件をTrialとして生成する。"
-    )]
     [SerializeField]
     private bool includeDynamicCondition =
         true;
 
 
     [Tooltip(
-        "JSON内部のStatic / Dynamic状態より、" +
-        "ExperimentalControllerのTrial条件を優先する。"
+        "Rally JSONに保存されているStatic/Dynamicより、" +
+        "Trial側の条件を優先する。"
     )]
     [SerializeField]
     private bool overrideShiftModeAfterJsonLoad =
@@ -365,7 +417,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     [Tooltip(
-        "実験中はExperiment Fadeを強制的にONにする。"
+        "実験中はExperiment FadeをONにする。"
     )]
     [SerializeField]
     private bool forceExperimentFadeEnabled =
@@ -379,7 +431,7 @@ public class ExperimentalController : MonoBehaviour
     [Header("Randomization")]
 
     [Tooltip(
-        "0ならSession開始時に自動生成する。\n" +
+        "0ならSession開始時に自動生成。\n" +
         "固定値なら同じTrial順を再現できる。"
     )]
     [SerializeField]
@@ -388,7 +440,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     [Tooltip(
-        "同じStatic / Dynamic条件が連続してよい最大数。\n" +
+        "同じStatic/Dynamic条件が連続してよい最大数。\n" +
         "0以下なら制限なし。"
     )]
     [SerializeField]
@@ -397,7 +449,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     [Tooltip(
-        "同じRally JSONが連続することを避ける。"
+        "同じRally JSONの連続を避ける。"
     )]
     [SerializeField]
     private bool avoidSameRallyConsecutive =
@@ -416,29 +468,28 @@ public class ExperimentalController : MonoBehaviour
 
     [Header("Timing")]
 
-    [Tooltip(
-        "JSON Load後からRally開始までの待ち時間 [s]"
-    )]
     [Min(0.0f)]
+    [Tooltip(
+        "JSON Load後から刺激開始までの待ち時間 [s]"
+    )]
     [SerializeField]
     private float trialPreparationDelaySeconds =
         0.05f;
 
 
-    [Tooltip(
-        "回答後から次Trial開始までの時間 [s]"
-    )]
     [Min(0.0f)]
+    [Tooltip(
+        "回答から次Trialまでの待ち時間 [s]"
+    )]
     [SerializeField]
     private float interTrialDelaySeconds =
         0.35f;
 
 
-    [Tooltip(
-        "FadeAmount=1を待つ最大時間 [s]。\n" +
-        "Fade設定ミスで無限待機しないためのSafety Timeout。"
-    )]
     [Min(1.0f)]
+    [Tooltip(
+        "Fade完了待機の最大時間 [s]"
+    )]
     [SerializeField]
     private float fadeWaitTimeoutSeconds =
         30.0f;
@@ -450,33 +501,21 @@ public class ExperimentalController : MonoBehaviour
 
     [Header("Response Labels")]
 
-    [Tooltip(
-        "In / Out試行で左入力したときの回答名"
-    )]
     [SerializeField]
     private string inOutLeftResponseLabel =
         "In";
 
 
-    [Tooltip(
-        "In / Out試行で右入力したときの回答名"
-    )]
     [SerializeField]
     private string inOutRightResponseLabel =
         "Out";
 
 
-    [Tooltip(
-        "Near / Far試行で左入力したときの回答名"
-    )]
     [SerializeField]
     private string nearFarLeftResponseLabel =
         "Near";
 
 
-    [Tooltip(
-        "Near / Far試行で右入力したときの回答名"
-    )]
     [SerializeField]
     private string nearFarRightResponseLabel =
         "Far";
@@ -489,8 +528,7 @@ public class ExperimentalController : MonoBehaviour
     [Header("Response Input")]
 
     [Tooltip(
-        "Keyboard回答を有効にする。\n" +
-        "Left  = ← / F\n" +
+        "Left = ← / F\n" +
         "Right = → / J"
     )]
     [SerializeField]
@@ -499,9 +537,8 @@ public class ExperimentalController : MonoBehaviour
 
 
     [Tooltip(
-        "Gamepad回答を有効にする。\n" +
-        "Left  = DPad Left / L1 / West Button\n" +
-        "Right = DPad Right / R1 / East Button"
+        "Left = DPad Left / L1 / West\n" +
+        "Right = DPad Right / R1 / East"
     )]
     [SerializeField]
     private bool enableGamepadResponse =
@@ -528,10 +565,6 @@ public class ExperimentalController : MonoBehaviour
 
     [Header("Finish")]
 
-    [Tooltip(
-        "Finish Button後にExperiment Panelを閉じ、" +
-        "Main Panelへ戻る。"
-    )]
     [SerializeField]
     private bool returnToMainPanelOnFinish =
         true;
@@ -596,7 +629,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Properties
+    // Public
     // ============================================================
 
     public ExperimentStage CurrentStage =>
@@ -604,11 +637,8 @@ public class ExperimentalController : MonoBehaviour
 
 
     public bool IsRunning =>
-        currentStage ==
-        ExperimentStage.InOut ||
-
-        currentStage ==
-        ExperimentStage.NearFar;
+        currentStage == ExperimentStage.InOut ||
+        currentStage == ExperimentStage.NearFar;
 
 
     public string ResultCsvPath =>
@@ -674,10 +704,6 @@ public class ExperimentalController : MonoBehaviour
         );
 
 
-        /*
-         * ExperimentalController自体は
-         * ExperimentPanelの外に置いておく。
-         */
         if (experimentPanel != null)
         {
             experimentPanel.SetActive(
@@ -829,11 +855,8 @@ public class ExperimentalController : MonoBehaviour
 
 
         if (
-            currentStage ==
-            ExperimentStage.Completed ||
-
-            currentStage ==
-            ExperimentStage.Aborted
+            currentStage == ExperimentStage.Completed ||
+            currentStage == ExperimentStage.Aborted
         )
         {
             ResetExperimentSession();
@@ -849,9 +872,6 @@ public class ExperimentalController : MonoBehaviour
 
     public void BackToMainPanel()
     {
-        /*
-         * Session開始後は誤ってPanelを閉じない。
-         */
         if (
             currentStage !=
             ExperimentStage.Ready
@@ -903,7 +923,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Experiment Session
+    // Session Start
     // ============================================================
 
     private void StartExperimentSession()
@@ -931,10 +951,6 @@ public class ExperimentalController : MonoBehaviour
                 : CreateRuntimeSeed();
 
 
-        /*
-         * 同一Session Seedから
-         * Blockごとに異なるSeedを作る。
-         */
         inOutBlockSeed =
             unchecked(
                 currentSessionSeed ^
@@ -1014,9 +1030,9 @@ public class ExperimentalController : MonoBehaviour
         Debug.Log(
             "[ExperimentalController] Experiment Start\n" +
             $"Participant = {GetParticipantId()}\n" +
-            $"InOut = {inOutTrials.Count}\n" +
-            $"NearFar = {nearFarTrials.Count}\n" +
-            $"Total = {totalExperimentTrialCount}\n" +
+            $"InOut Trials = {inOutTrials.Count}\n" +
+            $"NearFar Trials = {nearFarTrials.Count}\n" +
+            $"Total Trials = {totalExperimentTrialCount}\n" +
             $"Seed = {currentSessionSeed}\n" +
             $"CSV = {resultCsvPath}"
         );
@@ -1027,7 +1043,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // IN / OUT
+    // In / Out
     // ============================================================
 
     private void StartInOutBlock()
@@ -1058,7 +1074,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // REST
+    // Rest
     // ============================================================
 
     private void EnterRest()
@@ -1087,13 +1103,13 @@ public class ExperimentalController : MonoBehaviour
 
 
         Debug.Log(
-            "[ExperimentalController] REST"
+            "[ExperimentalController] In/Out Completed -> REST"
         );
     }
 
 
     // ============================================================
-    // NEAR / FAR
+    // Near / Far
     // ============================================================
 
     private void StartNearFarBlock()
@@ -1124,7 +1140,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // FINISH
+    // Finish
     // ============================================================
 
     private void EnterFinish()
@@ -1210,7 +1226,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Trial Pool
+    // Build Trial Pool
     // ============================================================
 
     private bool BuildTrialPool(
@@ -1233,12 +1249,22 @@ public class ExperimentalController : MonoBehaviour
         )
         {
             error =
-                $"{GetStageName(stage)}のDirectoryがありません。";
+                $"{GetStageName(stage)}用のDirectoryがありません。";
 
             return false;
         }
 
 
+        /*
+         * 同じJSONが重複登録されることを防ぐ。
+         *
+         * 例:
+         *
+         * Element 0 = Spike
+         * Element 1 = Spike/Front
+         *
+         * としてしまってもFrontのJSONを2回登録しない。
+         */
         HashSet<string> registeredJsonPaths =
             new HashSet<string>(
                 StringComparer.OrdinalIgnoreCase
@@ -1252,8 +1278,8 @@ public class ExperimentalController : MonoBehaviour
         {
             if (!TryGetDirectoryPath(
                 directoryObject,
-                out string directoryPath,
-                out string directoryName,
+                out string rootDirectoryPath,
+                out string rootDirectoryName,
                 out string directoryError
             ))
             {
@@ -1264,23 +1290,35 @@ public class ExperimentalController : MonoBehaviour
             }
 
 
-            SearchOption searchOption =
-                includeSubdirectories
-                    ? SearchOption.AllDirectories
-                    : SearchOption.TopDirectoryOnly;
-
-
+            /*
+             * 必ずAllDirectories。
+             *
+             * Spikeだけ入れて
+             *
+             * Spike/Front
+             * Spike/Behind
+             *
+             * まで全部取得する。
+             */
             string[] jsonPaths =
                 Directory.GetFiles(
-                    directoryPath,
+                    rootDirectoryPath,
                     "*.json",
-                    searchOption
+                    SearchOption.AllDirectories
                 );
 
 
             Array.Sort(
                 jsonPaths,
                 StringComparer.OrdinalIgnoreCase
+            );
+
+
+            Debug.Log(
+                "[ExperimentalController] Directory Scan\n" +
+                $"Stage = {GetStageName(stage)}\n" +
+                $"Root = {rootDirectoryPath}\n" +
+                $"JSON Count = {jsonPaths.Length}"
             );
 
 
@@ -1309,17 +1347,31 @@ public class ExperimentalController : MonoBehaviour
                     );
 
 
-                /*
-                 * 同じFolderを2回入れた場合や、
-                 * 親Folder + 子Folderを入れた場合の
-                 * 二重登録を防ぐ。
-                 */
                 if (!registeredJsonPaths.Add(
                     fullPath
                 ))
                 {
                     continue;
                 }
+
+
+                /*
+                 * JSONの親Folderを取得する。
+                 *
+                 * Spike/Front/trial01.json
+                 *
+                 * なら
+                 *
+                 * Spike/Front
+                 *
+                 * を作る。
+                 */
+                string sourceDirectory =
+                    GetRelativeSourceDirectory(
+                        rootDirectoryPath,
+                        rootDirectoryName,
+                        fullPath
+                    );
 
 
                 for (
@@ -1336,8 +1388,8 @@ public class ExperimentalController : MonoBehaviour
                         destination.Add(
                             CreateTrial(
                                 stage,
-                                directoryName,
-                                directoryPath,
+                                rootDirectoryName,
+                                sourceDirectory,
                                 fileName,
                                 fullPath,
                                 false,
@@ -1352,8 +1404,8 @@ public class ExperimentalController : MonoBehaviour
                         destination.Add(
                             CreateTrial(
                                 stage,
-                                directoryName,
-                                directoryPath,
+                                rootDirectoryName,
+                                sourceDirectory,
                                 fileName,
                                 fullPath,
                                 true,
@@ -1369,8 +1421,8 @@ public class ExperimentalController : MonoBehaviour
         if (destination.Count <= 0)
         {
             error =
-                $"{GetStageName(stage)}のDirectory内に" +
-                "Rally JSONがありません。";
+                $"{GetStageName(stage)}用Directory以下に" +
+                "使用可能なRally JSONがありません。";
 
             return false;
         }
@@ -1382,8 +1434,8 @@ public class ExperimentalController : MonoBehaviour
 
     private static ExperimentTrial CreateTrial(
         ExperimentStage stage,
-        string directoryName,
-        string directoryPath,
+        string rootDirectoryName,
+        string sourceDirectory,
         string rallyFileName,
         string rallyFilePath,
         bool dynamicShift,
@@ -1396,11 +1448,11 @@ public class ExperimentalController : MonoBehaviour
                 stage =
                     stage,
 
-                directoryName =
-                    directoryName,
+                rootDirectoryName =
+                    rootDirectoryName,
 
-                directoryPath =
-                    directoryPath,
+                sourceDirectory =
+                    sourceDirectory,
 
                 rallyFileName =
                     rallyFileName,
@@ -1418,7 +1470,135 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Directory Object -> Path
+    // Source Directory
+    // ============================================================
+
+    /// <summary>
+    /// Root Folderから見たJSONの親Folderを取得する。
+    ///
+    /// 例:
+    ///
+    /// Root:
+    /// C:/Project/Assets/Experiment/Spike
+    ///
+    /// JSON:
+    /// C:/Project/Assets/Experiment/Spike/Front/test.json
+    ///
+    /// Result:
+    /// Spike/Front
+    ///
+    ///
+    /// JSONがRoot直下なら:
+    ///
+    /// Spike
+    ///
+    /// になる。
+    /// </summary>
+    private static string GetRelativeSourceDirectory(
+        string rootDirectoryPath,
+        string rootDirectoryName,
+        string jsonFilePath
+    )
+    {
+        string rootFullPath =
+            Path.GetFullPath(
+                rootDirectoryPath
+            )
+            .TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            );
+
+
+        string jsonParentDirectory =
+            Path.GetDirectoryName(
+                jsonFilePath
+            );
+
+
+        if (string.IsNullOrWhiteSpace(
+            jsonParentDirectory
+        ))
+        {
+            return
+                rootDirectoryName;
+        }
+
+
+        string parentFullPath =
+            Path.GetFullPath(
+                jsonParentDirectory
+            )
+            .TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            );
+
+
+        /*
+         * JSONがRoot直下。
+         */
+        if (string.Equals(
+            rootFullPath,
+            parentFullPath,
+            StringComparison.OrdinalIgnoreCase
+        ))
+        {
+            return
+                rootDirectoryName;
+        }
+
+
+        string rootPrefix =
+            rootFullPath +
+            Path.DirectorySeparatorChar;
+
+
+        /*
+         * JSONがRoot以下にある。
+         */
+        if (parentFullPath.StartsWith(
+            rootPrefix,
+            StringComparison.OrdinalIgnoreCase
+        ))
+        {
+            string relativePart =
+                parentFullPath.Substring(
+                    rootPrefix.Length
+                );
+
+
+            relativePart =
+                relativePart
+                .Replace(
+                    Path.DirectorySeparatorChar,
+                    '/'
+                )
+                .Replace(
+                    Path.AltDirectorySeparatorChar,
+                    '/'
+                );
+
+
+            return
+                rootDirectoryName +
+                "/" +
+                relativePart;
+        }
+
+
+        /*
+         * 通常ここには来ないがSafety。
+         */
+        return
+            Path.GetFileName(
+                parentFullPath
+            );
+    }
+
+
+    // ============================================================
+    // Inspector Directory -> Path
     // ============================================================
 
     private bool TryGetDirectoryPath(
@@ -1482,11 +1662,13 @@ public class ExperimentalController : MonoBehaviour
 
 
         /*
-         * Application.dataPath:
+         * Application.dataPath
          *
-         * .../Project/Assets
+         * C:/Project/Assets
          *
-         * なので1つ上がProject Root。
+         * ProjectRoot
+         *
+         * C:/Project
          */
         string projectRoot =
             Path.GetFullPath(
@@ -1529,14 +1711,18 @@ public class ExperimentalController : MonoBehaviour
 #else
 
         error =
-            "Folder Drag & Drop方式はUnity Editor実行用です。\n" +
-            "Build版ではStreamingAssets方式が必要です。";
+            "Folder Drag & Drop方式はUnity Editor用です。\n" +
+            "Build版では別のFolder読込方式が必要です。";
 
         return false;
 
 #endif
     }
 
+
+    // ============================================================
+    // Excluded JSON
+    // ============================================================
 
     private bool IsExcludedJsonFile(
         string fileName
@@ -1585,7 +1771,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Randomization
+    // Randomize
     // ============================================================
 
     private void RandomizeTrialPool(
@@ -1655,14 +1841,22 @@ public class ExperimentalController : MonoBehaviour
                 );
 
 
+                Debug.Log(
+                    "[ExperimentalController] Randomization OK\n" +
+                    $"Stage = {GetStageName(trials[0].stage)}\n" +
+                    $"Seed = {seed}\n" +
+                    $"Attempt = {attempt + 1}"
+                );
+
+
                 return;
             }
         }
 
 
         /*
-         * 条件数の関係で制約を満たせない場合でも
-         * 実験自体は止めない。
+         * 条件数の都合でConstraintを満たせない場合でも
+         * 実験は止めない。
          */
         trials.Clear();
 
@@ -1683,7 +1877,8 @@ public class ExperimentalController : MonoBehaviour
 
         Debug.LogWarning(
             "[ExperimentalController] " +
-            "Randomize制約を完全には満たせませんでした。"
+            "Randomization制約を完全には満たせませんでした。" +
+            "最後のShuffle結果を使用します。"
         );
     }
 
@@ -1748,6 +1943,10 @@ public class ExperimentalController : MonoBehaviour
                 trials[i];
 
 
+            // ====================================================
+            // Same Rally
+            // ====================================================
+
             if (
                 avoidSameRallyConsecutive &&
 
@@ -1761,6 +1960,10 @@ public class ExperimentalController : MonoBehaviour
                 return false;
             }
 
+
+            // ====================================================
+            // Static / Dynamic
+            // ====================================================
 
             if (
                 previous.dynamicShift ==
@@ -1856,10 +2059,11 @@ public class ExperimentalController : MonoBehaviour
 
 
         /*
-         * Rally JSONを先にLoadする。
+         * 1.
+         * Rally JSON Load
          *
-         * JSONにはStatic / Dynamic設定が保存されているので、
-         * Shift Mode上書きより必ず先。
+         * JSON内部にDHIT設定が保存されている可能性があるため、
+         * Static / Dynamic Overrideより必ず先にLoadする。
          */
         bool loaded =
             rallyController.LoadRallyJsonFromPath(
@@ -1880,7 +2084,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // Static / Dynamic Override
+        // Static / Dynamic
         // ========================================================
 
         if (overrideShiftModeAfterJsonLoad)
@@ -1904,14 +2108,13 @@ public class ExperimentalController : MonoBehaviour
 
 
         /*
-         * Load時にもResetされるが、
-         * Trial開始前に明示的にFade=0へ戻す。
+         * 前TrialのFadeを確実に解除。
          */
         rallyController.ResetExperimentFade();
 
 
         // ========================================================
-        // Preparation Delay
+        // Preparation Wait
         // ========================================================
 
         if (
@@ -1937,7 +2140,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // Playing
+        // Start Rally
         // ========================================================
 
         currentTrialState =
@@ -1950,9 +2153,8 @@ public class ExperimentalController : MonoBehaviour
         Debug.Log(
             "[ExperimentalController] Trial Start\n" +
             $"Stage = {GetStageName(currentStage)}\n" +
-            $"Trial = {currentBlockTrialIndex + 1}" +
-            $" / {currentTrialPool.Count}\n" +
-            $"Directory = {trial.directoryName}\n" +
+            $"Trial = {currentBlockTrialIndex + 1}/{currentTrialPool.Count}\n" +
+            $"Directory = {trial.sourceDirectory}\n" +
             $"Rally = {trial.rallyFileName}\n" +
             $"Shift = {(trial.dynamicShift ? "Dynamic" : "Static")}\n" +
             $"Repeat = {trial.repetition}"
@@ -1967,16 +2169,13 @@ public class ExperimentalController : MonoBehaviour
         // ========================================================
 
         /*
-         * RallyがどのPhaseから始まり、
-         * End Phaseまで何秒かかるかはTrialごとに違う。
+         * FadeAmount:
          *
-         * そのため「FadeDelay秒待つ」のではなく、
-         * ImageController.FadeAmountそのものを監視する。
+         * 0 = Normal
+         * 1 = Completely Black
          *
-         * FadeAmount >= 1
-         * = 完全遮蔽
-         *
-         * になった瞬間から回答RTを開始する。
+         * FadeAmountが1になった時点から
+         * Response Timeを開始する。
          */
 
         double fadeWaitStartTime =
@@ -2013,7 +2212,7 @@ public class ExperimentalController : MonoBehaviour
             {
                 AbortExperimentWithMessage(
                     "Fadeが完了しませんでした。\n\n" +
-                    "Rally JSONのEnd Phase / Fade設定を確認してください。"
+                    "Rally JSONのEnd PhaseやFade設定を確認してください。"
                 );
 
                 yield break;
@@ -2025,7 +2224,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // Awaiting Response
+        // Response Start
         // ========================================================
 
         responseStartRealtime =
@@ -2043,6 +2242,10 @@ public class ExperimentalController : MonoBehaviour
             null;
     }
 
+
+    // ============================================================
+    // Block Complete
+    // ============================================================
 
     private void CompleteCurrentBlock()
     {
@@ -2072,7 +2275,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Keyboard / Controller Input
+    // Input
     // ============================================================
 
     private void ReadResponseInput()
@@ -2143,7 +2346,7 @@ public class ExperimentalController : MonoBehaviour
 #else
 
         // ========================================================
-        // Legacy Input System
+        // Legacy Input
         // ========================================================
 
         if (enableKeyboardResponse)
@@ -2199,7 +2402,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         /*
-         * 左右同時入力は採用しない。
+         * 同一Frameで左右両方押された場合は無視。
          */
         if (
             leftPressed &&
@@ -2230,7 +2433,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Response
+    // Submit Response
     // ============================================================
 
     private void SubmitResponse(
@@ -2263,14 +2466,14 @@ public class ExperimentalController : MonoBehaviour
             TrialState.InterTrial;
 
 
-        double responseEndTime =
+        double responseEndRealtime =
             Time.realtimeSinceStartupAsDouble;
 
 
         double responseTimeSeconds =
             Math.Max(
                 0.0,
-                responseEndTime -
+                responseEndRealtime -
                 responseStartRealtime
             );
 
@@ -2296,8 +2499,8 @@ public class ExperimentalController : MonoBehaviour
         Debug.Log(
             "[ExperimentalController] Response\n" +
             $"Stage = {GetStageName(trial.stage)}\n" +
+            $"Directory = {trial.sourceDirectory}\n" +
             $"Rally = {trial.rallyFileName}\n" +
-            $"Side = {responseSide}\n" +
             $"Response = {responseLabel}\n" +
             $"RT = {responseTimeSeconds * 1000.0:F3} ms"
         );
@@ -2343,6 +2546,10 @@ public class ExperimentalController : MonoBehaviour
         StartNextTrial();
     }
 
+
+    // ============================================================
+    // Response Label
+    // ============================================================
 
     private string GetResponseLabel(
         ExperimentStage stage,
@@ -2403,19 +2610,15 @@ public class ExperimentalController : MonoBehaviour
                 );
 
 
-            string timestamp =
-                DateTime.Now.ToString(
-                    "yyyyMMdd_HHmmss",
-                    CultureInfo.InvariantCulture
-                );
-
-
+            /*
+             * Result_<ID>.csv
+             *
+             * 例:
+             * Result_P01.csv
+             */
             string fileName =
+                "Result_" +
                 participantId +
-                "_" +
-                timestamp +
-                "_seed" +
-                currentSessionSeed +
                 ".csv";
 
 
@@ -2424,6 +2627,37 @@ public class ExperimentalController : MonoBehaviour
                     resultDirectory,
                     fileName
                 );
+
+
+            /*
+             * 同じParticipant IDのCSVが既にある場合は
+             * 誤上書きを防ぐ。
+             */
+            if (File.Exists(
+                resultCsvPath
+            ))
+            {
+                string timestamp =
+                    DateTime.Now.ToString(
+                        "yyyyMMdd_HHmmss",
+                        CultureInfo.InvariantCulture
+                    );
+
+
+                fileName =
+                    "Result_" +
+                    participantId +
+                    "_" +
+                    timestamp +
+                    ".csv";
+
+
+                resultCsvPath =
+                    Path.Combine(
+                        resultDirectory,
+                        fileName
+                    );
+            }
 
 
             string[] headerColumns =
@@ -2519,6 +2753,10 @@ public class ExperimentalController : MonoBehaviour
             resultCsvPath
         ))
         {
+            Debug.LogError(
+                "[ExperimentalController] CSV Pathがありません。"
+            );
+
             return;
         }
 
@@ -2566,7 +2804,13 @@ public class ExperimentalController : MonoBehaviour
                     ),
 
 
-                trial.directoryName,
+                /*
+                 * 例:
+                 *
+                 * Spike/Front
+                 * Spike/Behind
+                 */
+                trial.sourceDirectory,
 
 
                 trial.rallyFileName,
@@ -2661,7 +2905,7 @@ public class ExperimentalController : MonoBehaviour
             };
 
 
-            StringBuilder line =
+            StringBuilder lineBuilder =
                 new StringBuilder();
 
 
@@ -2673,13 +2917,13 @@ public class ExperimentalController : MonoBehaviour
             {
                 if (i > 0)
                 {
-                    line.Append(
+                    lineBuilder.Append(
                         ','
                     );
                 }
 
 
-                line.Append(
+                lineBuilder.Append(
                     EscapeCsv(
                         columns[i]
                     )
@@ -2689,11 +2933,14 @@ public class ExperimentalController : MonoBehaviour
 
             /*
              * Trialごとに即時保存。
+             *
+             * Unityが途中で落ちても
+             * それまでのTrialは残る。
              */
             File.AppendAllText(
                 resultCsvPath,
 
-                line.ToString() +
+                lineBuilder.ToString() +
                 Environment.NewLine,
 
                 new UTF8Encoding(
@@ -2721,13 +2968,10 @@ public class ExperimentalController : MonoBehaviour
         }
 
 
-        bool needsQuote =
+        bool requiresQuotes =
             value.Contains(",") ||
-
             value.Contains("\"") ||
-
             value.Contains("\n") ||
-
             value.Contains("\r");
 
 
@@ -2738,17 +2982,10 @@ public class ExperimentalController : MonoBehaviour
             );
 
 
-        if (needsQuote)
-        {
-            return
-                "\"" +
-                escaped +
-                "\"";
-        }
-
-
         return
-            escaped;
+            requiresQuotes
+                ? "\"" + escaped + "\""
+                : escaped;
     }
 
 
@@ -2769,7 +3006,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // READY
+        // Ready
         // ========================================================
 
         if (
@@ -2799,7 +3036,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // IN / OUT
+        // In / Out
         // ========================================================
 
         if (
@@ -2816,47 +3053,42 @@ public class ExperimentalController : MonoBehaviour
             );
 
 
-            if (
-                currentTrialState ==
-                TrialState.Preparing
-            )
+            switch (currentTrialState)
             {
-                text +=
-                    "\n次の試行を準備しています。";
-            }
+                case TrialState.Preparing:
+
+                    text +=
+                        "\n次の試行を準備しています。";
+
+                    break;
 
 
-            if (
-                currentTrialState ==
-                TrialState.Playing
-            )
-            {
-                text +=
-                    "\n刺激提示中";
-            }
+                case TrialState.Playing:
+
+                    text +=
+                        "\n刺激提示中";
+
+                    break;
 
 
-            if (
-                currentTrialState ==
-                TrialState.AwaitingResponse
-            )
-            {
-                text +=
-                    "\n<b>回答してください</b>\n\n" +
+                case TrialState.AwaitingResponse:
 
-                    $"←  {inOutLeftResponseLabel}" +
+                    text +=
+                        "\n<b>回答してください</b>\n\n" +
 
-                    $"          {inOutRightResponseLabel}  →";
-            }
+                        $"←  {inOutLeftResponseLabel}" +
+
+                        $"          {inOutRightResponseLabel}  →";
+
+                    break;
 
 
-            if (
-                currentTrialState ==
-                TrialState.InterTrial
-            )
-            {
-                text +=
-                    "\n回答を記録しました。";
+                case TrialState.InterTrial:
+
+                    text +=
+                        "\n回答を記録しました。";
+
+                    break;
             }
 
 
@@ -2869,7 +3101,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // REST
+        // Rest
         // ========================================================
 
         if (
@@ -2898,7 +3130,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // NEAR / FAR
+        // Near / Far
         // ========================================================
 
         if (
@@ -2915,47 +3147,42 @@ public class ExperimentalController : MonoBehaviour
             );
 
 
-            if (
-                currentTrialState ==
-                TrialState.Preparing
-            )
+            switch (currentTrialState)
             {
-                text +=
-                    "\n次の試行を準備しています。";
-            }
+                case TrialState.Preparing:
+
+                    text +=
+                        "\n次の試行を準備しています。";
+
+                    break;
 
 
-            if (
-                currentTrialState ==
-                TrialState.Playing
-            )
-            {
-                text +=
-                    "\n刺激提示中";
-            }
+                case TrialState.Playing:
+
+                    text +=
+                        "\n刺激提示中";
+
+                    break;
 
 
-            if (
-                currentTrialState ==
-                TrialState.AwaitingResponse
-            )
-            {
-                text +=
-                    "\n<b>回答してください</b>\n\n" +
+                case TrialState.AwaitingResponse:
 
-                    $"←  {nearFarLeftResponseLabel}" +
+                    text +=
+                        "\n<b>回答してください</b>\n\n" +
 
-                    $"          {nearFarRightResponseLabel}  →";
-            }
+                        $"←  {nearFarLeftResponseLabel}" +
+
+                        $"          {nearFarRightResponseLabel}  →";
+
+                    break;
 
 
-            if (
-                currentTrialState ==
-                TrialState.InterTrial
-            )
-            {
-                text +=
-                    "\n回答を記録しました。";
+                case TrialState.InterTrial:
+
+                    text +=
+                        "\n回答を記録しました。";
+
+                    break;
             }
 
 
@@ -2968,7 +3195,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // FINISH
+        // Finish
         // ========================================================
 
         if (
@@ -2993,7 +3220,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // COMPLETED
+        // Completed
         // ========================================================
 
         if (
@@ -3020,7 +3247,7 @@ public class ExperimentalController : MonoBehaviour
 
 
         // ========================================================
-        // ABORTED
+        // Aborted
         // ========================================================
 
         if (
@@ -3048,7 +3275,6 @@ public class ExperimentalController : MonoBehaviour
     {
         if (
             currentTrialPool == null ||
-
             currentTrialPool.Count <= 0
         )
         {
@@ -3097,55 +3323,45 @@ public class ExperimentalController : MonoBehaviour
     {
         if (startButton != null)
         {
-            bool visible =
-                currentStage ==
-                ExperimentStage.Ready ||
-
-                currentStage ==
-                ExperimentStage.Rest;
+            bool showStart =
+                currentStage == ExperimentStage.Ready ||
+                currentStage == ExperimentStage.Rest;
 
 
             startButton.gameObject.SetActive(
-                visible
+                showStart
             );
 
 
             startButton.interactable =
-                visible;
+                showStart;
         }
 
 
         if (finishButton != null)
         {
-            bool visible =
+            bool showFinish =
                 currentStage ==
                 ExperimentStage.Finish;
 
 
             finishButton.gameObject.SetActive(
-                visible
+                showFinish
             );
 
 
             finishButton.interactable =
-                visible;
+                showFinish;
         }
 
 
         if (abortButton != null)
         {
             abortButton.interactable =
-                currentStage ==
-                ExperimentStage.InOut ||
-
-                currentStage ==
-                ExperimentStage.Rest ||
-
-                currentStage ==
-                ExperimentStage.NearFar ||
-
-                currentStage ==
-                ExperimentStage.Finish;
+                currentStage == ExperimentStage.InOut ||
+                currentStage == ExperimentStage.Rest ||
+                currentStage == ExperimentStage.NearFar ||
+                currentStage == ExperimentStage.Finish;
         }
 
 
@@ -3173,14 +3389,9 @@ public class ExperimentalController : MonoBehaviour
     public void AbortExperiment()
     {
         if (
-            currentStage ==
-            ExperimentStage.Ready ||
-
-            currentStage ==
-            ExperimentStage.Completed ||
-
-            currentStage ==
-            ExperimentStage.Aborted
+            currentStage == ExperimentStage.Ready ||
+            currentStage == ExperimentStage.Completed ||
+            currentStage == ExperimentStage.Aborted
         )
         {
             return;
@@ -3216,7 +3427,6 @@ public class ExperimentalController : MonoBehaviour
 
         RefreshButtonState();
 
-
         RefreshOutputText();
 
 
@@ -3230,7 +3440,7 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Reset Session
+    // Reset
     // ============================================================
 
     private void ResetExperimentSession()
@@ -3242,7 +3452,6 @@ public class ExperimentalController : MonoBehaviour
 
 
         inOutTrials.Clear();
-
 
         nearFarTrials.Clear();
 
@@ -3325,7 +3534,6 @@ public class ExperimentalController : MonoBehaviour
 
         RefreshButtonState();
 
-
         RefreshOutputText();
     }
 
@@ -3375,7 +3583,8 @@ public class ExperimentalController : MonoBehaviour
         )
         {
             error =
-                "Static / Dynamicのどちらかを有効にしてください。";
+                "Static / Dynamicのどちらか1つ以上を" +
+                "有効にしてください。";
 
             return false;
         }
@@ -3383,7 +3592,6 @@ public class ExperimentalController : MonoBehaviour
 
         if (
             inOutTrialDirectories == null ||
-
             inOutTrialDirectories.Count <= 0
         )
         {
@@ -3396,7 +3604,6 @@ public class ExperimentalController : MonoBehaviour
 
         if (
             nearFarTrialDirectories == null ||
-
             nearFarTrialDirectories.Count <= 0
         )
         {
@@ -3419,11 +3626,8 @@ public class ExperimentalController : MonoBehaviour
     {
         if (
             currentTrialPool == null ||
-
             currentBlockTrialIndex < 0 ||
-
-            currentBlockTrialIndex >=
-            currentTrialPool.Count
+            currentBlockTrialIndex >= currentTrialPool.Count
         )
         {
             return null;

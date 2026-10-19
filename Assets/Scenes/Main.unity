@@ -48722,9 +48722,11 @@ MonoBehaviour:
   backButton: {fileID: 1654468107}
   outputText: {fileID: 1037263773}
   participantIdInputField: {fileID: 1411189186}
-  inOutTrialDirectories: []
-  nearFarTrialDirectories: []
-  includeSubdirectories: 0
+  inOutTrialDirectories:
+  - {fileID: 102900000, guid: 1e25ee9df65f26b418b413c9167054f9, type: 3}
+  - {fileID: 102900000, guid: 6ce2e87ba2310a24a8ee76bbc26fc338, type: 3}
+  nearFarTrialDirectories:
+  - {fileID: 102900000, guid: 1a203e1a597577a4b938a9110042ba31, type: 3}
   excludedJsonFileNames:
   - manifest.json
   repeatCount: 1
