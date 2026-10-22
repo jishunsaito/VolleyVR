@@ -76,7 +76,7 @@ public class RallyController : MonoBehaviour
         public bool hasDhitSettings;
         public float baseShiftPixels;
         public bool dynamicShiftEnabled;
-        public DhitSettings dhitSettings;
+        public DhitSettings dhitSettings = new DhitSettings();
     }
 
     public enum PlayPhase

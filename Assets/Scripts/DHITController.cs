@@ -2,62 +2,27 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// Rally JSON互換用のDHIT設定。
-///
-/// version 2以降ではPole基準DHIT用の
-/// maxShiftVelocityPxPerSecを保存する。
-/// version 3以降では追従速度倍率とStartup Boost設定も保存する。
-///
-/// 旧DHITで使用していたパラメータも
-/// 既存コード / 既存JSONとの互換性のため残しているが、
-/// Pole基準DHITの制御には使用しない。
+/// Rally JSON / old UI compatibility settings.
+/// Current Pole-based DHIT uses maxShiftVelocityPxPerSec and
+/// usePoleMidpointAsStaticShift. Legacy fields are kept only so
+/// older JSON can still deserialize without compile/runtime issues.
 /// </summary>
 [Serializable]
 public class DhitSettings
 {
     public int version = 3;
-
-    [Tooltip("static or dynamic")]
     public string mode = "static";
-
-    [Tooltip("Pole基準DHITのZDP shift最大変化速度 [px/s]。0 = 制限なし")]
     public float maxShiftVelocityPxPerSec = 20.0f;
+    public bool usePoleMidpointAsStaticShift = true;
 
-    [Tooltip("通常時のPole追従速度倍率。1 = 従来速度")]
-    public float trackingSpeedMultiplier = 1.25f;
-
-    [Tooltip("Trial開始後、最初のTarget Poleを取得した直後だけ使う追従速度倍率")]
-    public float startupBoostMultiplier = 2.0f;
-
-    [Tooltip("Startup Boostを継続する時間 [s]")]
-    public float startupBoostDurationSec = 0.25f;
-
-
-    // =========================================================
-    // Legacy fields
-    // =========================================================
-    // 以前の「視差速度 × gain」方式とのJSON / API互換用。
-    // Pole基準DHITでは使用しない。
-
-    [HideInInspector]
-    public float gain = 0.30f;
-
-    [HideInInspector]
-    public float maxPositiveAdditionalDisparityPx = 20.0f;
-
-    [HideInInspector]
-    public float maxNegativeAdditionalDisparityPx = 20.0f;
-
-    [HideInInspector]
-    public float maxAdditionalDisparityVelocityPxPerSec = 10.0f;
-
-    [HideInInspector]
-    public float velocityDeadZonePxPerSec = 0.5f;
-
-    [HideInInspector]
-    public float filterTimeConstantSec = 0.05f;
+    // Legacy JSON compatibility fields (not used by current algorithm)
+    [HideInInspector] public float gain = 0.30f;
+    [HideInInspector] public float maxPositiveAdditionalDisparityPx = 20.0f;
+    [HideInInspector] public float maxNegativeAdditionalDisparityPx = 20.0f;
+    [HideInInspector] public float maxAdditionalDisparityVelocityPxPerSec = 10.0f;
+    [HideInInspector] public float velocityDeadZonePxPerSec = 0.5f;
+    [HideInInspector] public float filterTimeConstantSec = 0.05f;
 }
-
 
 
 public class DHITController : MonoBehaviour
@@ -86,8 +51,7 @@ public class DHITController : MonoBehaviour
         "ON = Dynamic HIT"
     )]
     [SerializeField]
-    private bool dhitEnabled =
-        false;
+    private bool dhitEnabled = false;
 
 
     // =========================================================
@@ -103,46 +67,7 @@ public class DHITController : MonoBehaviour
     )]
     [Min(0.0f)]
     [SerializeField]
-    private float maxShiftVelocityPxPerSec =
-        20.0f;
-
-
-    // =========================================================
-    // Tracking Speed
-    // =========================================================
-
-    [Header("Tracking Speed")]
-
-    [Tooltip(
-        "通常時のPole追従速度倍率。\n" +
-        "1 = 従来速度、1.25 = 25%高速化。"
-    )]
-    [Min(0.0f)]
-    [SerializeField]
-    private float trackingSpeedMultiplier =
-        1.25f;
-
-
-    [Tooltip(
-        "Trialごとに最初のTarget Poleを取得した直後だけ、\n" +
-        "追従速度へ追加で掛ける倍率。\n" +
-        "前TrialのShiftを引き継がず、毎回同じBase Shiftから\n" +
-        "素早くTarget Pole側へ収束させるために使います。"
-    )]
-    [Min(0.0f)]
-    [SerializeField]
-    private float startupBoostMultiplier =
-        2.0f;
-
-
-    [Tooltip(
-        "最初のTarget Pole取得後、Startup Boostを継続する時間 [s]。\n" +
-        "0ならStartup Boostなし。"
-    )]
-    [Min(0.0f)]
-    [SerializeField]
-    private float startupBoostDurationSec =
-        0.25f;
+    private float maxShiftVelocityPxPerSec = 20.0f;
 
 
     // =========================================================
@@ -152,39 +77,33 @@ public class DHITController : MonoBehaviour
     [Header("Static HIT")]
 
     [Tooltip(
-        "現在のBase Shift [px]。\n" +
-        "通常はNet Centerのraw disparity / 2から自動計算されます。\n" +
-        "Static時はNet Centerを0 disparityに固定し、\n" +
-        "Dynamic時はこの位置を初期値としてPole-based DHITを開始します。"
+        "ONの場合、Static HITをNear/Far PoleのZDP用shiftの中点に固定します。\n\n" +
+        "StaticShift = (NearPoleShift + FarPoleShift) / 2\n\n" +
+        "これによりNear/Far Poleのシフト後視差が対称になります。"
     )]
     [SerializeField]
-    private float baseShiftPixels =
-        0.0f;
+    private bool usePoleMidpointAsStaticShift = true;
 
 
     [Tooltip(
-        "旧Scene / 旧設定との互換用。\n" +
-        "ONの場合はAwake時にImageControllerの現在ShiftをFallbackとして取り込みます。\n" +
-        "実際のBase Shiftは最初のLateUpdateでNet Center ZDPへ自動更新されます。"
+        "Static HITとして使用するshiftPixels。\n" +
+        "Use Pole Midpoint As Static ShiftがONの場合は自動計算されます。"
     )]
     [SerializeField]
-    private bool initializeBaseShiftFromImageControllerOnAwake =
-        false;
+    private float baseShiftPixels = 0.0f;
 
-
-    // =========================================================
-    // Rally JSON compatibility
-    // =========================================================
-
-    [Header("Saved DHIT Settings")]
 
     [Tooltip(
-        "Rally JSONとの互換用。\n" +
-        "modeとmaxShiftVelocityPxPerSecを保存します。"
+        "Pole MidpointモードがOFFの場合のみ使用します。\n" +
+        "BeginTrial()時点のImageController.shiftPixelsを" +
+        "Static HITとして取得します。"
     )]
     [SerializeField]
-    private DhitSettings settings =
-        new DhitSettings();
+    private bool captureBaseShiftAtTrialStart = true;
+
+
+    // Pole中点のStatic Shiftを取得済みか
+    private bool poleMidpointStaticShiftInitialized = false;
 
 
     // =========================================================
@@ -207,64 +126,44 @@ public class DHITController : MonoBehaviour
     // Internal State
     // =========================================================
 
-    private bool depthInitialized =
-        false;
+    private bool depthInitialized = false;
 
+    private float previousBallDepthMeters = 0.0f;
 
-    private float previousBallDepthMeters =
-        0.0f;
+    private float currentShiftPixels = 0.0f;
 
-
-    private float currentShiftPixels =
-        0.0f;
-
-
-    private float targetShiftPixels =
-        0.0f;
-
-
-    // Trialごとに一度だけ発動するStartup Boost。
-    private bool startupBoostTriggered =
-        false;
-
-
-    private float startupBoostRemainingSec =
-        0.0f;
-
-
-    /*
-     * Dynamic Trial開始時に、
-     * BallDisparityCalculatorがそのFrameで計算した
-     * 最新のNet Center視差を使ってBase Shiftを確定するためのFlag。
-     *
-     * BeginTrial / SetDynamicEnabled / JSON Loadなどでtrueにし、
-     * LateUpdateで一度だけNet Centerへ再同期した後falseにする。
-     */
-    private bool needsNetCenterInitialization =
-        true;
-
-
-    // 旧DHITの公開Debug値との互換用。
-    // Pole制御には使用しない。
-    private bool disparityInitializedForDebug =
-        false;
-
-
-    private float previousBallDisparityPxForDebug =
-        0.0f;
+    private float targetShiftPixels = 0.0f;
 
 
     // =========================================================
-    // Public State / Compatibility
+    // Public Debug Values
     // =========================================================
 
     public bool DHITEnabled =>
         dhitEnabled;
 
-
-    // 現在のUIControllerが参照する名前。
+    // Existing RallyController / UIController compatibility
     public bool IsDynamic =>
         dhitEnabled;
+
+    public float CurrentFinalShiftPixels =>
+        currentShiftPixels;
+
+    public float CurrentDynamicShiftPixels =>
+        currentShiftPixels - baseShiftPixels;
+
+    public float CurrentAdditionalDisparityPx =>
+        -2.0f * CurrentDynamicShiftPixels;
+
+    public float CurrentDhitVelocityPxPerSec
+    {
+        get;
+        private set;
+    }
+
+
+    public bool UsePoleMidpointAsStaticShift =>
+        usePoleMidpointAsStaticShift;
 
 
     public float BaseShiftPixels =>
@@ -277,29 +176,6 @@ public class DHITController : MonoBehaviour
 
     public float TargetShiftPixels =>
         targetShiftPixels;
-
-
-    public float CurrentFinalShiftPixels =>
-        currentShiftPixels;
-
-
-    public float CurrentDynamicShiftPixels =>
-        currentShiftPixels -
-        baseShiftPixels;
-
-
-    /// <summary>
-    /// 旧「additional disparity」APIとの互換値。
-    ///
-    /// shiftedDisparity = rawDisparity - 2 * shiftPixels
-    /// なので、BaseからのShift差を追加視差へ戻すと
-    /// additionalDisparity = -2 * dynamicShift。
-    ///
-    /// Pole制御には使用しない。
-    /// </summary>
-    public float CurrentAdditionalDisparityPx =>
-        -2.0f *
-        CurrentDynamicShiftPixels;
 
 
     public float CurrentBallDepthMeters
@@ -360,87 +236,13 @@ public class DHITController : MonoBehaviour
         currentTargetPole.ToString();
 
 
-    public bool StartupBoostActive =>
-        startupBoostRemainingSec > 0.0f;
-
-
-    public float StartupBoostRemainingSec =>
-        startupBoostRemainingSec;
-
-
-    public float CurrentTrackingSpeedMultiplier
-    {
-        get;
-        private set;
-    } = 1.0f;
-
-
     // =========================================================
-    // Legacy Debug Properties
-    // =========================================================
-
-    public float CurrentBallDisparityPx
-    {
-        get;
-        private set;
-    }
-
-
-    public float CurrentRawDisparityVelocityPxPerSec
-    {
-        get;
-        private set;
-    }
-
-
-    public float CurrentFilteredDisparityVelocityPxPerSec
-    {
-        get;
-        private set;
-    }
-
-
-    public float CurrentDhitVelocityPxPerSec
-    {
-        get;
-        private set;
-    }
-
-
-    // =========================================================
-    // ZDP Target Shifts
+    // Pole Target Shifts
     // =========================================================
 
     /// <summary>
-    /// Net CenterをZDP (= shifted disparity 0) にするShift [px]。
-    ///
-    /// shiftedDisparity
-    /// = rawDisparity - 2 * shiftPixels
-    ///
-    /// よってZDP条件では
-    /// shiftPixels = rawDisparity / 2。
+    /// Near PoleをZDPにするためのshiftPixels
     /// </summary>
-    public float NetCenterTargetShiftPixels
-    {
-        get
-        {
-            if (
-                ballDisparityCalculator == null ||
-                !ballDisparityCalculator.HasNetCenter
-            )
-            {
-                return 0.0f;
-            }
-
-
-            return
-                ballDisparityCalculator
-                    .NetCenterDisparityPixels *
-                0.5f;
-        }
-    }
-
-
     public float NearPoleTargetShiftPixels
     {
         get
@@ -452,7 +254,6 @@ public class DHITController : MonoBehaviour
             {
                 return 0.0f;
             }
-
 
             /*
              * shiftedDisparity
@@ -480,6 +281,9 @@ public class DHITController : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Far PoleをZDPにするためのshiftPixels
+    /// </summary>
     public float FarPoleTargetShiftPixels
     {
         get
@@ -492,10 +296,38 @@ public class DHITController : MonoBehaviour
                 return 0.0f;
             }
 
-
             return
                 ballDisparityCalculator
                     .FarPoleDisparityPixels *
+                0.5f;
+        }
+    }
+
+
+    /// <summary>
+    /// Near/Far PoleのZDP用shiftの中点。
+    ///
+    /// Static HITの基準として使用する。
+    /// </summary>
+    public float PoleMidpointShiftPixels
+    {
+        get
+        {
+            if (
+                ballDisparityCalculator == null ||
+                !ballDisparityCalculator.HasNearPole ||
+                !ballDisparityCalculator.HasFarPole
+            )
+            {
+                return baseShiftPixels;
+            }
+
+            return
+                (
+                    NearPoleTargetShiftPixels +
+                    FarPoleTargetShiftPixels
+                )
+                *
                 0.5f;
         }
     }
@@ -507,58 +339,22 @@ public class DHITController : MonoBehaviour
 
     private void Awake()
     {
-        EnsureSettings();
+        /*
+         * Pole中点がまだ取得できない可能性があるため、
+         * Awakeでは一旦ImageControllerの現在値を保持する。
+         *
+         * Poleデータが取得可能になった時点で、
+         * Pole中点モードなら自動的に置き換える。
+         */
 
-
-        if (
-            initializeBaseShiftFromImageControllerOnAwake &&
-            imageController != null
-        )
+        if (imageController != null)
         {
             baseShiftPixels =
-                imageController.ShiftPixels;
+                imageController.shiftPixels;
         }
 
 
-        // Sceneに保存されているboolを正とし、
-        // JSON互換settings側へ同期する。
-        settings.mode =
-            dhitEnabled
-                ? "dynamic"
-                : "static";
-
-
-        settings.version =
-            3;
-
-
-        settings.maxShiftVelocityPxPerSec =
-            maxShiftVelocityPxPerSec;
-
-
-        settings.trackingSpeedMultiplier =
-            trackingSpeedMultiplier;
-
-
-        settings.startupBoostMultiplier =
-            startupBoostMultiplier;
-
-
-        settings.startupBoostDurationSec =
-            startupBoostDurationSec;
-
-
         ResetInternalState();
-
-
-        /*
-         * Awake時点ではBallDisparityCalculatorのUpdate()が
-         * まだ走っていない可能性がある。
-         * そのため現在値はFallbackとして適用し、
-         * 最初のLateUpdateで必ずNet Centerへ同期する。
-         */
-        needsNetCenterInitialization =
-            true;
 
 
         currentShiftPixels =
@@ -575,14 +371,7 @@ public class DHITController : MonoBehaviour
 
     /// <summary>
     /// BallDisparityCalculatorはUpdate()で計算するので、
-    /// DHITControllerはLateUpdate()でそのFrameの最新結果を使用する。
-    ///
-    /// Static:
-    /// Net Centerを常にZDP (= 0 disparity) に固定する。
-    ///
-    /// Dynamic:
-    /// Trial開始時だけNet CenterをZDPにして、
-    /// そこから従来のPole-based DHITを行う。
+    /// DHITControllerはLateUpdate()で結果を使用する。
     /// </summary>
     private void LateUpdate()
     {
@@ -595,37 +384,58 @@ public class DHITController : MonoBehaviour
         }
 
 
-        UpdateLegacyDisparityDebug();
+        // =====================================================
+        // Pole midpoint Static Shift initialization
+        // =====================================================
+
+        /*
+         * AwakeやBeginTrial時点でPole情報がまだ取得できていない場合、
+         * Calculatorの計算が完了した最初のLateUpdateで取得する。
+         *
+         * 一度取得したら、その試行中は固定。
+         */
+
+        if (
+            usePoleMidpointAsStaticShift &&
+            !poleMidpointStaticShiftInitialized
+        )
+        {
+            if (TrySetPoleMidpointAsBaseShift())
+            {
+                /*
+                 * まだDynamicの方向が決まっていない場合は、
+                 * Current ShiftもStatic位置へ揃える。
+                 */
+
+                if (
+                    !dhitEnabled ||
+                    currentTargetPole == TargetPole.None
+                )
+                {
+                    currentShiftPixels =
+                        baseShiftPixels;
+
+                    targetShiftPixels =
+                        baseShiftPixels;
+
+                    ApplyCurrentShift();
+                }
+            }
+        }
 
 
         // =====================================================
         // Static condition
-        //
-        // Net Centerを常に0 disparityへ固定する。
-        // Camera / Baseline / Focal Lengthなどが変わっても、
-        // そのFrameのNet Center raw disparityからBaseを再計算する。
         // =====================================================
 
         if (!dhitEnabled)
         {
-            if (!ApplyNetCenterAsBaseShift())
-            {
-                /*
-                 * Net Center情報がまだ無い場合だけ、
-                 * 現在のBase ShiftをFallbackとして維持する。
-                 */
-                currentShiftPixels =
-                    baseShiftPixels;
+            currentShiftPixels =
+                baseShiftPixels;
 
 
-                targetShiftPixels =
-                    baseShiftPixels;
-
-
-                ApplyCurrentShift();
-
-                return;
-            }
+            targetShiftPixels =
+                baseShiftPixels;
 
 
             currentTargetPole =
@@ -634,18 +444,6 @@ public class DHITController : MonoBehaviour
 
             depthInitialized =
                 false;
-
-
-            startupBoostTriggered =
-                false;
-
-
-            startupBoostRemainingSec =
-                0.0f;
-
-
-            CurrentTrackingSpeedMultiplier =
-                1.0f;
 
 
             CurrentDepthVelocityMps =
@@ -668,48 +466,7 @@ public class DHITController : MonoBehaviour
                 0.0f;
 
 
-            needsNetCenterInitialization =
-                true;
-
-
-            return;
-        }
-
-
-        // =====================================================
-        // Dynamic condition - Initial Net Center calibration
-        //
-        // BeginTrial()等が呼ばれた後、
-        // 最初のLateUpdateでNet CenterをZDPにする。
-        // このFrameではDHIT追従を開始せず、
-        // 必ずNet Center位置から次Frame以降のDHITを開始する。
-        // =====================================================
-
-        if (needsNetCenterInitialization)
-        {
-            if (!ApplyNetCenterAsBaseShift())
-            {
-                return;
-            }
-
-
-            ResetInternalState();
-
-
-            currentShiftPixels =
-                baseShiftPixels;
-
-
-            targetShiftPixels =
-                baseShiftPixels;
-
-
             ApplyCurrentShift();
-
-
-            needsNetCenterInitialization =
-                false;
-
 
             return;
         }
@@ -750,14 +507,6 @@ public class DHITController : MonoBehaviour
         UpdateTargetShift();
 
 
-        // 3.5.
-        // Trialごとの最初のTarget Pole取得時だけ
-        // Startup Boostを開始する。
-        UpdateStartupBoost(
-            dt
-        );
-
-
         // 4.
         // Near/Far Pole geometryから
         // depth velocity -> shift velocityへ変換
@@ -772,12 +521,7 @@ public class DHITController : MonoBehaviour
 
 
         CurrentDhitVelocityPxPerSec =
-            (
-                currentShiftPixels -
-                shiftBefore
-            )
-            /
-            dt;
+            (currentShiftPixels - shiftBefore) / dt;
 
 
         // 6.
@@ -791,30 +535,75 @@ public class DHITController : MonoBehaviour
     // =========================================================
 
     /// <summary>
-    /// 現在のStatic / Dynamic状態を維持したままTrialを開始する。
+    /// false = Static
+    /// true  = Dynamic
     ///
-    /// Static:
-    /// LateUpdateでNet Centerを常に0 disparityへ固定する。
+    /// Pole Midpoint Static ShiftがONの場合：
     ///
-    /// Dynamic:
-    /// Trial開始時のBase ShiftをNet Center ZDPへ戻し、
-    /// 最初のLateUpdateでそのFrameの最新Net Center視差へ再同期してから
-    /// Pole-based DHITを開始する。
+    /// Near/Far PoleのZDP用shiftの中点を
+    /// Static HITとして自動的に設定する。
+    ///
+    /// Dynamic条件でも、
+    /// このStatic位置からDHITを開始する。
+    /// </summary>
+    /// <summary>
+    /// Keep the currently selected Static/Dynamic mode and start a trial.
+    /// Used by RallyController.
     /// </summary>
     public void BeginTrial()
     {
+        BeginTrial(dhitEnabled);
+    }
+
+
+    public void BeginTrial(
+        bool dynamicCondition
+    )
+    {
+        dhitEnabled =
+            dynamicCondition;
+
+
+        // =====================================================
+        // Static Shift determination
+        // =====================================================
+
+        if (usePoleMidpointAsStaticShift)
+        {
+            /*
+             * 新しい試行なので、
+             * Pole中点を改めて計算する。
+             *
+             * 試行中はこの値を固定する。
+             */
+
+            poleMidpointStaticShiftInitialized =
+                false;
+
+
+            TrySetPoleMidpointAsBaseShift();
+        }
+        else
+        {
+            /*
+             * 従来方式。
+             *
+             * 現在のImageController.shiftPixelsを
+             * Static HITとして取得する。
+             */
+
+            if (
+                captureBaseShiftAtTrialStart &&
+                imageController != null
+            )
+            {
+                baseShiftPixels =
+                    imageController.shiftPixels;
+            }
+        }
+
+
         ResetInternalState();
-
-
-        /*
-         * まず現在キャッシュされているNet Center値で即時に合わせる。
-         * そのうえでLateUpdateでもう一度最新値へ同期する。
-         */
-        ApplyNetCenterAsBaseShift();
-
-
-        needsNetCenterInitialization =
-            true;
 
 
         currentShiftPixels =
@@ -826,44 +615,6 @@ public class DHITController : MonoBehaviour
 
 
         ApplyCurrentShift();
-    }
-
-
-    /// <summary>
-    /// 旧Pole版との互換用。
-    /// false = Static
-    /// true  = Dynamic
-    /// </summary>
-    public void BeginTrial(
-        bool dynamicCondition
-    )
-    {
-        SetDynamicEnabled(
-            dynamicCondition
-        );
-
-
-        BeginTrial();
-    }
-
-
-    /// <summary>
-    /// 旧「trial-specific DhitSettings」呼出しとの互換用。
-    /// Pole基準方式ではmodeと最大Shift速度だけを使用する。
-    /// </summary>
-    public void BeginTrial(
-        DhitSettings newSettings
-    )
-    {
-        if (newSettings != null)
-        {
-            ApplySettings(
-                newSettings
-            );
-        }
-
-
-        BeginTrial();
     }
 
 
@@ -872,17 +623,6 @@ public class DHITController : MonoBehaviour
         ResetInternalState();
 
 
-        /*
-         * Reset / Trial終了時もNet Center ZDPへ戻す。
-         * 次のLateUpdateでも最新値へ再同期する。
-         */
-        ApplyNetCenterAsBaseShift();
-
-
-        needsNetCenterInitialization =
-            true;
-
-
         currentShiftPixels =
             baseShiftPixels;
 
@@ -892,6 +632,155 @@ public class DHITController : MonoBehaviour
 
 
         ApplyCurrentShift();
+    }
+
+
+    // =========================================================
+    // Pole Midpoint Static Shift
+    // =========================================================
+
+    /// <summary>
+    /// Near/Far PoleをそれぞれZDPにするためのshiftの中点を
+    /// Static HITとして設定する。
+    ///
+    ///
+    /// Near Pole:
+    ///
+    /// Snear = Dnear / 2
+    ///
+    ///
+    /// Far Pole:
+    ///
+    /// Sfar = Dfar / 2
+    ///
+    ///
+    /// Static:
+    ///
+    /// Sstatic = (Snear + Sfar) / 2
+    ///
+    ///
+    /// このとき、Static HIT適用後のNear/Far Pole視差は
+    /// 大きさが等しく符号が反対になる。
+    /// </summary>
+    private bool TrySetPoleMidpointAsBaseShift()
+    {
+        if (
+            ballDisparityCalculator == null ||
+            !ballDisparityCalculator.HasNearPole ||
+            !ballDisparityCalculator.HasFarPole
+        )
+        {
+            return false;
+        }
+
+
+        float nearShift =
+            NearPoleTargetShiftPixels;
+
+
+        float farShift =
+            FarPoleTargetShiftPixels;
+
+
+        baseShiftPixels =
+            (
+                nearShift +
+                farShift
+            )
+            *
+            0.5f;
+
+
+        poleMidpointStaticShiftInitialized =
+            true;
+
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Inspectorや外部スクリプトから、
+    /// Pole中点Static Shiftを再計算したい場合に使用。
+    /// </summary>
+    public bool RecalculatePoleMidpointStaticShift()
+    {
+        poleMidpointStaticShiftInitialized =
+            false;
+
+
+        bool success =
+            TrySetPoleMidpointAsBaseShift();
+
+
+        if (!success)
+        {
+            return false;
+        }
+
+
+        /*
+         * Static条件ならその場で反映する。
+         *
+         * Dynamic中はCurrent Shiftを急に飛ばさない。
+         */
+
+        if (!dhitEnabled)
+        {
+            currentShiftPixels =
+                baseShiftPixels;
+
+
+            targetShiftPixels =
+                baseShiftPixels;
+
+
+            ApplyCurrentShift();
+        }
+
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Pole中点方式のON/OFFを外部から変更する。
+    /// </summary>
+    public void SetUsePoleMidpointAsStaticShift(
+        bool enabled
+    )
+    {
+        usePoleMidpointAsStaticShift =
+            enabled;
+
+
+        if (enabled)
+        {
+            poleMidpointStaticShiftInitialized =
+                false;
+
+
+            if (TrySetPoleMidpointAsBaseShift())
+            {
+                if (!dhitEnabled)
+                {
+                    currentShiftPixels =
+                        baseShiftPixels;
+
+
+                    targetShiftPixels =
+                        baseShiftPixels;
+
+
+                    ApplyCurrentShift();
+                }
+            }
+        }
+        else
+        {
+            poleMidpointStaticShiftInitialized =
+                false;
+        }
     }
 
 
@@ -903,112 +792,41 @@ public class DHITController : MonoBehaviour
         bool enabled
     )
     {
-        dhitEnabled =
-            enabled;
+        dhitEnabled = enabled;
 
-
-        EnsureSettings();
-
-
-        settings.mode =
-            dhitEnabled
-                ? "dynamic"
-                : "static";
-
+        if (usePoleMidpointAsStaticShift)
+        {
+            poleMidpointStaticShiftInitialized = false;
+            TrySetPoleMidpointAsBaseShift();
+        }
 
         ResetInternalState();
-
-
-        /*
-         * Static / Dynamic切替時にも基準をNet Centerへ戻す。
-         * Dynamicへ切り替えた場合は、最初のLateUpdateで
-         * 最新のNet Center値へ再同期した後にDHITを開始する。
-         */
-        ApplyNetCenterAsBaseShift();
-
-
-        needsNetCenterInitialization =
-            true;
-
-
-        currentShiftPixels =
-            baseShiftPixels;
-
-
-        targetShiftPixels =
-            baseShiftPixels;
-
-
+        currentShiftPixels = baseShiftPixels;
+        targetShiftPixels = baseShiftPixels;
         ApplyCurrentShift();
     }
 
 
-    // 旧Pole版APIの別名。
+    // Alias kept for older code.
     public void SetDHITEnabled(
         bool enabled
     )
     {
-        SetDynamicEnabled(
-            enabled
-        );
+        SetDynamicEnabled(enabled);
     }
 
-
-    // =========================================================
-    // Net Center Base Shift
-    // =========================================================
-
-    /// <summary>
-    /// 現在BallDisparityCalculatorが保持しているNet Centerの
-    /// raw disparityからBase Shiftを求める。
-    ///
-    /// shiftedDisparity
-    /// = rawDisparity - 2 * shiftPixels
-    ///
-    /// Net Centerを0 disparityにするため、
-    ///
-    /// baseShiftPixels
-    /// = NetCenterDisparityPixels / 2
-    ///
-    /// とする。
-    ///
-    /// BallDisparityCalculator自体は変更せず、
-    /// 既に計算済みの値を参照するだけ。
-    /// </summary>
-    private bool ApplyNetCenterAsBaseShift()
-    {
-        if (
-            ballDisparityCalculator == null ||
-            !ballDisparityCalculator.HasNetCenter
-        )
-        {
-            return false;
-        }
-
-
-        baseShiftPixels =
-            NetCenterTargetShiftPixels;
-
-
-        currentShiftPixels =
-            baseShiftPixels;
-
-
-        targetShiftPixels =
-            baseShiftPixels;
-
-
-        ApplyCurrentShift();
-
-
-        return true;
-    }
 
 
     // =========================================================
     // Base Shift
     // =========================================================
 
+    /// <summary>
+    /// Manual Static Shift用。
+    ///
+    /// Pole MidpointモードがONの場合、
+    /// 次回BeginTrial時にPole中点で上書きされる。
+    /// </summary>
     public void SetBaseShiftPixels(
         float shiftPixels
     )
@@ -1032,16 +850,24 @@ public class DHITController : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Manual Static Shift用。
+    ///
+    /// Pole MidpointモードがONの場合は使用しない。
+    /// </summary>
     public void CaptureCurrentShiftAsBase()
     {
-        if (imageController == null)
+        if (
+            imageController == null ||
+            usePoleMidpointAsStaticShift
+        )
         {
             return;
         }
 
 
         baseShiftPixels =
-            imageController.ShiftPixels;
+            imageController.shiftPixels;
 
 
         if (!dhitEnabled)
@@ -1052,51 +878,23 @@ public class DHITController : MonoBehaviour
 
             targetShiftPixels =
                 baseShiftPixels;
-
-
-            ApplyCurrentShift();
         }
     }
 
 
     // =========================================================
-    // JSON Save / Load Compatibility
+    // Rally JSON Compatibility
     // =========================================================
 
     public DhitSettings CreateSettingsSnapshot()
     {
-        EnsureSettings();
-
-
-        settings.version =
-            3;
-
-
-        settings.mode =
-            dhitEnabled
-                ? "dynamic"
-                : "static";
-
-
-        settings.maxShiftVelocityPxPerSec =
-            maxShiftVelocityPxPerSec;
-
-
-        settings.trackingSpeedMultiplier =
-            trackingSpeedMultiplier;
-
-
-        settings.startupBoostMultiplier =
-            startupBoostMultiplier;
-
-
-        settings.startupBoostDurationSec =
-            startupBoostDurationSec;
-
-
-        return CopySettings(
-            settings
-        );
+        return new DhitSettings
+        {
+            version = 3,
+            mode = dhitEnabled ? "dynamic" : "static",
+            maxShiftVelocityPxPerSec = maxShiftVelocityPxPerSec,
+            usePoleMidpointAsStaticShift = usePoleMidpointAsStaticShift
+        };
     }
 
 
@@ -1106,188 +904,82 @@ public class DHITController : MonoBehaviour
         DhitSettings savedSettings
     )
     {
-        baseShiftPixels =
-            savedBaseShiftPixels;
-
-
         if (savedSettings != null)
         {
-            ApplySettings(
-                savedSettings
-            );
+            // Old JSON can have version 0/1 and no current fields.
+            // Only overwrite the velocity limit when it is a meaningful saved value
+            // or when this is a current-format setting.
+            if (savedSettings.version >= 2 || savedSettings.maxShiftVelocityPxPerSec > 0.0f)
+            {
+                maxShiftVelocityPxPerSec =
+                    Mathf.Max(0.0f, savedSettings.maxShiftVelocityPxPerSec);
+            }
+
+            if (savedSettings.version >= 3)
+            {
+                usePoleMidpointAsStaticShift =
+                    savedSettings.usePoleMidpointAsStaticShift;
+            }
         }
 
+        dhitEnabled = dynamicEnabled;
 
-        // RallySettingsData側のboolを最終的なON/OFFの正とする。
-        dhitEnabled =
-            dynamicEnabled;
+        if (usePoleMidpointAsStaticShift)
+        {
+            poleMidpointStaticShiftInitialized = false;
 
-
-        EnsureSettings();
-
-
-        settings.mode =
-            dhitEnabled
-                ? "dynamic"
-                : "static";
-
+            // If Pole values are already available, use them now.
+            // Otherwise keep the saved value as a temporary fallback;
+            // LateUpdate will replace it once the calculator becomes valid.
+            baseShiftPixels = savedBaseShiftPixels;
+            TrySetPoleMidpointAsBaseShift();
+        }
+        else
+        {
+            baseShiftPixels = savedBaseShiftPixels;
+            poleMidpointStaticShiftInitialized = false;
+        }
 
         ResetInternalState();
-
-
-        /*
-         * JSONに保存されていたBase Shiftは互換性のため一度読み込むが、
-         * 実際の表示基準は次のLateUpdateでNet Center ZDPへ再計算する。
-         */
-        needsNetCenterInitialization =
-            true;
-
-
-        currentShiftPixels =
-            baseShiftPixels;
-
-
-        targetShiftPixels =
-            baseShiftPixels;
-
-
+        currentShiftPixels = baseShiftPixels;
+        targetShiftPixels = baseShiftPixels;
         ApplyCurrentShift();
     }
 
 
-    private void ApplySettings(
-        DhitSettings source
+    /// <summary>
+    /// Legacy overload. Applies saved settings, then starts a trial.
+    /// </summary>
+    public void BeginTrial(
+        DhitSettings newSettings
     )
     {
-        if (source == null)
+        if (newSettings != null)
         {
-            return;
+            if (newSettings.version >= 2 || newSettings.maxShiftVelocityPxPerSec > 0.0f)
+            {
+                maxShiftVelocityPxPerSec =
+                    Mathf.Max(0.0f, newSettings.maxShiftVelocityPxPerSec);
+            }
+
+            if (newSettings.version >= 3)
+            {
+                usePoleMidpointAsStaticShift =
+                    newSettings.usePoleMidpointAsStaticShift;
+            }
+
+            if (!string.IsNullOrEmpty(newSettings.mode))
+            {
+                dhitEnabled =
+                    string.Equals(
+                        newSettings.mode,
+                        "dynamic",
+                        StringComparison.OrdinalIgnoreCase
+                    );
+            }
         }
 
-
-        EnsureSettings();
-
-
-        settings =
-            CopySettings(
-                source
-            );
-
-
-        /*
-         * 新Pole版JSON(version 2以降)だけ、
-         * maxShiftVelocityPxPerSecを復元する。
-         *
-         * 旧「視差速度 × gain」版JSONにはこの値が存在しないため、
-         * そのJSONを読んだだけで0 (= unlimited)へ変わらないようにする。
-         */
-        if (source.version >= 2)
-        {
-            maxShiftVelocityPxPerSec =
-                Mathf.Max(
-                    0.0f,
-                    source.maxShiftVelocityPxPerSec
-                );
-        }
-
-
-        if (source.version >= 3)
-        {
-            trackingSpeedMultiplier =
-                Mathf.Max(
-                    0.0f,
-                    source.trackingSpeedMultiplier
-                );
-
-
-            startupBoostMultiplier =
-                Mathf.Max(
-                    0.0f,
-                    source.startupBoostMultiplier
-                );
-
-
-            startupBoostDurationSec =
-                Mathf.Max(
-                    0.0f,
-                    source.startupBoostDurationSec
-                );
-        }
-
-
-        if (!string.IsNullOrWhiteSpace(
-            source.mode
-        ))
-        {
-            dhitEnabled =
-                string.Equals(
-                    source.mode,
-                    "dynamic",
-                    StringComparison.OrdinalIgnoreCase
-                );
-        }
-    }
-
-
-    private static DhitSettings CopySettings(
-        DhitSettings source
-    )
-    {
-        if (source == null)
-        {
-            return new DhitSettings();
-        }
-
-
-        return new DhitSettings
-        {
-            version =
-                source.version,
-
-            mode =
-                source.mode,
-
-            maxShiftVelocityPxPerSec =
-                source.maxShiftVelocityPxPerSec,
-
-            trackingSpeedMultiplier =
-                source.trackingSpeedMultiplier,
-
-            startupBoostMultiplier =
-                source.startupBoostMultiplier,
-
-            startupBoostDurationSec =
-                source.startupBoostDurationSec,
-
-            // Legacy valuesもそのまま保持する。
-            gain =
-                source.gain,
-
-            maxPositiveAdditionalDisparityPx =
-                source.maxPositiveAdditionalDisparityPx,
-
-            maxNegativeAdditionalDisparityPx =
-                source.maxNegativeAdditionalDisparityPx,
-
-            maxAdditionalDisparityVelocityPxPerSec =
-                source.maxAdditionalDisparityVelocityPxPerSec,
-
-            velocityDeadZonePxPerSec =
-                source.velocityDeadZonePxPerSec,
-
-            filterTimeConstantSec =
-                source.filterTimeConstantSec
-        };
-    }
-
-
-    private void EnsureSettings()
-    {
-        if (settings == null)
-        {
-            settings =
-                new DhitSettings();
-        }
+        BeginTrial();
     }
 
 
@@ -1350,16 +1042,21 @@ public class DHITController : MonoBehaviour
         // =====================================================
         // Camera-space depth velocity
         //
+        //
         // Vz =
         //
         // Z(t) - Z(t-dt)
         // ----------------
         //       dt
         //
+        //
         // Vz < 0
+        //
         // Cameraへ近づく
         //
+        //
         // Vz > 0
+        //
         // Cameraから遠ざかる
         // =====================================================
 
@@ -1525,63 +1222,6 @@ public class DHITController : MonoBehaviour
 
 
     // =========================================================
-    // 3.5. Startup Catch-Up
-    // =========================================================
-
-    /// <summary>
-    /// Trialごとに最初のNear/Far Poleが決まった瞬間から、
-    /// 一定時間だけ追従速度を上げる。
-    ///
-    /// Shift値そのものを前Trialから引き継いだり、
-    /// Poleへ瞬間移動させたりはしない。
-    ///
-    /// BeginTrial()で毎回Base Shiftへ戻るため、
-    /// 同一条件なら毎回同じ初期状態から始まる。
-    /// </summary>
-    private void UpdateStartupBoost(
-        float dt
-    )
-    {
-        if (
-            !startupBoostTriggered &&
-            currentTargetPole != TargetPole.None
-        )
-        {
-            startupBoostTriggered =
-                true;
-
-
-            startupBoostRemainingSec =
-                Mathf.Max(
-                    0.0f,
-                    startupBoostDurationSec
-                );
-        }
-
-
-        if (
-            startupBoostRemainingSec <=
-            0.0f
-        )
-        {
-            startupBoostRemainingSec =
-                0.0f;
-
-
-            return;
-        }
-
-
-        startupBoostRemainingSec =
-            Mathf.Max(
-                0.0f,
-                startupBoostRemainingSec -
-                dt
-            );
-    }
-
-
-    // =========================================================
     // 4. Depth Velocity -> Shift Velocity
     // =========================================================
 
@@ -1636,7 +1276,7 @@ public class DHITController : MonoBehaviour
 
 
         // =====================================================
-        // Pole間のDepth距離
+        // Near / Far Pole depth difference
         // =====================================================
 
         float depthDifference =
@@ -1647,7 +1287,7 @@ public class DHITController : MonoBehaviour
 
 
         // =====================================================
-        // Pole間のShift距離
+        // Near / Far Pole shift difference
         // =====================================================
 
         float shiftDifference =
@@ -1682,17 +1322,15 @@ public class DHITController : MonoBehaviour
         // =====================================================
         // Geometry-derived conversion
         //
+        //
         // K =
         //
         // Pole間Shift [px]
         // -----------------
         // Pole間Depth [m]
         //
-        // [px/m]
         //
-        // 調整用gainではなく、
-        // 現在の撮影条件とPole geometryから
-        // 自動的に決まる。
+        // [px/m]
         // =====================================================
 
         float shiftPerDepth =
@@ -1707,46 +1345,24 @@ public class DHITController : MonoBehaviour
         // =====================================================
         // Natural shift velocity
         //
+        //
         // Vshift =
         //
         // K * |Vz|
         //
+        //
         // [px/m] * [m/s]
+        //
         // =
+        //
         // [px/s]
         // =====================================================
 
-        float baseNaturalShiftVelocity =
+        float naturalShiftVelocity =
             shiftPerDepth *
             Mathf.Abs(
                 CurrentDepthVelocityMps
             );
-
-
-        float speedMultiplier =
-            Mathf.Max(
-                0.0f,
-                trackingSpeedMultiplier
-            );
-
-
-        if (StartupBoostActive)
-        {
-            speedMultiplier *=
-                Mathf.Max(
-                    0.0f,
-                    startupBoostMultiplier
-                );
-        }
-
-
-        CurrentTrackingSpeedMultiplier =
-            speedMultiplier;
-
-
-        float naturalShiftVelocity =
-            baseNaturalShiftVelocity *
-            speedMultiplier;
 
 
         CurrentNaturalShiftVelocityPxPerSec =
@@ -1756,10 +1372,6 @@ public class DHITController : MonoBehaviour
         // =====================================================
         // Maximum velocity limit
         //
-        // trackingSpeedMultiplier / Startup Boostで
-        // 全体の追従速度を高速化するときは、
-        // 上限側も同じ倍率で拡張する。
-        //
         // 0 = unlimited
         // =====================================================
 
@@ -1768,15 +1380,10 @@ public class DHITController : MonoBehaviour
             0.0f
         )
         {
-            float effectiveMaxVelocity =
-                maxShiftVelocityPxPerSec *
-                speedMultiplier;
-
-
             CurrentAppliedShiftVelocityPxPerSec =
                 Mathf.Min(
                     naturalShiftVelocity,
-                    effectiveMaxVelocity
+                    maxShiftVelocityPxPerSec
                 );
         }
         else
@@ -1821,26 +1428,15 @@ public class DHITController : MonoBehaviour
         // =====================================================
         // TargetはNear/Far Poleそのもの。
         //
-        // ただしActual shiftは
+        // Actual shiftは
         // 奥行き速度に応じた速度でそこへ向かう。
-        //
-        // S(t + dt)
-        //
-        // =
-        //
-        // MoveTowards(
-        //     S(t),
-        //     Starget,
-        //     Vshift * dt
-        // )
         // =====================================================
 
         currentShiftPixels =
             Mathf.MoveTowards(
                 currentShiftPixels,
                 targetShiftPixels,
-                shiftVelocity *
-                dt
+                shiftVelocity * dt
             );
     }
 
@@ -1860,99 +1456,6 @@ public class DHITController : MonoBehaviour
         imageController.SetShiftPixels(
             currentShiftPixels
         );
-    }
-
-
-    // =========================================================
-    // Legacy Debug Update
-    // =========================================================
-
-    private void UpdateLegacyDisparityDebug()
-    {
-        if (
-            ballDisparityCalculator == null ||
-            !ballDisparityCalculator.HasBall
-        )
-        {
-            disparityInitializedForDebug =
-                false;
-
-
-            CurrentBallDisparityPx =
-                0.0f;
-
-
-            CurrentRawDisparityVelocityPxPerSec =
-                0.0f;
-
-
-            CurrentFilteredDisparityVelocityPxPerSec =
-                0.0f;
-
-
-            return;
-        }
-
-
-        float currentDisparity =
-            ballDisparityCalculator
-                .DisparityPixels;
-
-
-        CurrentBallDisparityPx =
-            currentDisparity;
-
-
-        float dt =
-            Time.deltaTime;
-
-
-        if (
-            !disparityInitializedForDebug ||
-            dt <= 0.0f
-        )
-        {
-            previousBallDisparityPxForDebug =
-                currentDisparity;
-
-
-            disparityInitializedForDebug =
-                true;
-
-
-            CurrentRawDisparityVelocityPxPerSec =
-                0.0f;
-
-
-            CurrentFilteredDisparityVelocityPxPerSec =
-                0.0f;
-
-
-            return;
-        }
-
-
-        float rawVelocity =
-            (
-                currentDisparity -
-                previousBallDisparityPxForDebug
-            )
-            /
-            dt;
-
-
-        previousBallDisparityPxForDebug =
-            currentDisparity;
-
-
-        CurrentRawDisparityVelocityPxPerSec =
-            rawVelocity;
-
-
-        // Pole版ではfilterを制御に使わないため、
-        // 互換表示上はRaw値と同じ値を返す。
-        CurrentFilteredDisparityVelocityPxPerSec =
-            rawVelocity;
     }
 
 
@@ -1979,14 +1482,6 @@ public class DHITController : MonoBehaviour
             0.0f;
 
 
-        disparityInitializedForDebug =
-            false;
-
-
-        previousBallDisparityPxForDebug =
-            0.0f;
-
-
         CurrentDepthVelocityMps =
             0.0f;
 
@@ -1996,18 +1491,6 @@ public class DHITController : MonoBehaviour
 
 
         CurrentAppliedShiftVelocityPxPerSec =
-            0.0f;
-
-
-        CurrentRawDisparityVelocityPxPerSec =
-            0.0f;
-
-
-        CurrentFilteredDisparityVelocityPxPerSec =
-            0.0f;
-
-
-        CurrentDhitVelocityPxPerSec =
             0.0f;
     }
 
@@ -2030,26 +1513,6 @@ public class DHITController : MonoBehaviour
             TargetPole.None;
 
 
-        startupBoostTriggered =
-            false;
-
-
-        startupBoostRemainingSec =
-            0.0f;
-
-
-        CurrentTrackingSpeedMultiplier =
-            1.0f;
-
-
-        disparityInitializedForDebug =
-            false;
-
-
-        previousBallDisparityPxForDebug =
-            0.0f;
-
-
         CurrentBallDepthMeters =
             0.0f;
 
@@ -2067,18 +1530,6 @@ public class DHITController : MonoBehaviour
 
 
         CurrentAppliedShiftVelocityPxPerSec =
-            0.0f;
-
-
-        CurrentBallDisparityPx =
-            0.0f;
-
-
-        CurrentRawDisparityVelocityPxPerSec =
-            0.0f;
-
-
-        CurrentFilteredDisparityVelocityPxPerSec =
             0.0f;
 
 

@@ -14,6 +14,9 @@ using UnityEngine.InputSystem;
 
 #if UNITY_EDITOR
 using UnityEditor;
+using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
+using UnityEngine.SceneManagement;
 #endif
 
 
@@ -93,23 +96,20 @@ using UnityEditor;
 ///
 /// In / Out:
 ///
-/// Left  = In
-/// Right = Out
+/// ○位置 / buttonEast  = In
+/// ×位置 / buttonSouth = Out
 ///
 /// Near / Far:
 ///
-/// Left  = Near
-/// Right = Far
+/// D-Pad Up   = Far / 奥
+/// D-Pad Down = Near / 手前
 ///
 /// Keyboard:
 ///
-/// Left  = ← / F
-/// Right = → / J
-///
-/// Gamepad:
-///
-/// Left  = DPad Left / L1 / West
-/// Right = DPad Right / R1 / East
+/// F = In
+/// J = Out
+/// ↑ = Far / 奥
+/// ↓ = Near / 手前
 ///
 ///
 /// ============================================================
@@ -149,10 +149,15 @@ using UnityEditor;
 /// Important
 /// ============================================================
 ///
-/// InspectorへFolderを直接Drag & Dropする方式なので、
-/// 現在はUnity Editor上で実験することを前提とする。
+/// InspectorへFolderを直接Drag & Dropする。
 ///
-/// Build版へ移行するときはStreamingAssets等へ変更する。
+/// Build時はEditor専用Build Processorが、
+/// 指定Folder以下のJSONをTextAsset参照として自動梱包する。
+///
+/// 実行時はそのJSONをApplication.persistentDataPath以下へ一時展開し、
+/// 既存のRallyController.LoadRallyJsonFromPath()へ渡す。
+///
+/// そのため、元のSpike / Set等のFolderをStreamingAssetsへ移動する必要はない。
 /// </summary>
 public class ExperimentalController : MonoBehaviour
 {
@@ -227,6 +232,34 @@ public class ExperimentalController : MonoBehaviour
         public bool dynamicShift;
 
         public int repetition;
+    }
+
+
+    // ============================================================
+    // Packed Rally JSON
+    // ============================================================
+
+    /// <summary>
+    /// Editor上でInspector指定Folderから収集し、
+    /// Buildへ一緒に含めるRally JSON。
+    ///
+    /// Folder AssetそのものはBuild版では参照できないため、
+    /// JSON本体(TextAsset)と必要なPath情報だけをSerializeして保持する。
+    /// </summary>
+    [Serializable]
+    private class PackedRallyJson
+    {
+        public TextAsset jsonAsset;
+
+        public string assetGuid;
+
+        public string rootDirectoryName;
+
+        public string sourceDirectory;
+
+        public string rallyFileName;
+
+        public string sourceAssetPath;
     }
 
 
@@ -363,6 +396,29 @@ public class ExperimentalController : MonoBehaviour
     [SerializeField]
     private List<UnityEngine.Object> nearFarTrialDirectories =
         new List<UnityEngine.Object>();
+
+
+    // ============================================================
+    // Build Packed JSON Cache
+    // ============================================================
+
+    /*
+     * ここはInspectorでは非表示。
+     *
+     * Editor / Build時にinOutTrialDirectories・nearFarTrialDirectoriesから
+     * 自動生成される。
+     *
+     * TextAsset参照をSceneへSerializeしておくことで、
+     * 元FolderをStreamingAssetsへ移動しなくてもBuildへJSONが含まれる。
+     */
+    [SerializeField, HideInInspector]
+    private List<PackedRallyJson> packedInOutJsons =
+        new List<PackedRallyJson>();
+
+
+    [SerializeField, HideInInspector]
+    private List<PackedRallyJson> packedNearFarJsons =
+        new List<PackedRallyJson>();
 
 
     // ============================================================
@@ -528,8 +584,9 @@ public class ExperimentalController : MonoBehaviour
     [Header("Response Input")]
 
     [Tooltip(
-        "Left = ← / F\n" +
-        "Right = → / J"
+        "Keyboard予備入力。\n" +
+        "In = F / Out = J\n" +
+        "奥(Far) = ↑ / 手前(Near) = ↓"
     )]
     [SerializeField]
     private bool enableKeyboardResponse =
@@ -537,8 +594,11 @@ public class ExperimentalController : MonoBehaviour
 
 
     [Tooltip(
-        "Left = DPad Left / L1 / West\n" +
-        "Right = DPad Right / R1 / East"
+        "Gamepad入力。\n" +
+        "In = ○位置 / buttonEast\n" +
+        "Out = ×位置 / buttonSouth\n" +
+        "奥(Far) = D-Pad Up\n" +
+        "手前(Near) = D-Pad Down"
     )]
     [SerializeField]
     private bool enableGamepadResponse =
@@ -645,6 +705,511 @@ public class ExperimentalController : MonoBehaviour
         resultCsvPath;
 
 
+#if UNITY_EDITOR
+
+    // ============================================================
+    // Editor Build Packing
+    // ============================================================
+
+    /// <summary>
+    /// InspectorでFolderや除外JSON設定を変更したときに、
+    /// Buildへ含めるTextAsset参照を自動更新する。
+    /// </summary>
+    private void OnValidate()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            return;
+        }
+
+
+        RefreshPackedRallyJsonAssetsEditor(
+            false,
+            true
+        );
+    }
+
+
+    /// <summary>
+    /// 手動確認用。
+    /// ComponentのContext Menuからも再収集できる。
+    /// </summary>
+    [ContextMenu("Refresh Packed Rally JSONs")]
+    private void RefreshPackedRallyJsonAssetsContextMenu()
+    {
+        RefreshPackedRallyJsonAssetsEditor(
+            true,
+            true
+        );
+    }
+
+
+    /// <summary>
+    /// Build Pipelineから呼ばれる。
+    /// 元Sceneを書き換えず、Build対象Scene上のComponentへ
+    /// JSON TextAsset参照を詰め込む。
+    /// </summary>
+    public void RefreshPackedRallyJsonAssetsForBuild()
+    {
+        RefreshPackedRallyJsonAssetsEditor(
+            true,
+            false
+        );
+    }
+
+
+    private void RefreshPackedRallyJsonAssetsEditor(
+        bool logSummary,
+        bool markDirty
+    )
+    {
+        List<PackedRallyJson> newInOut =
+            CollectPackedRallyJsonsEditor(
+                inOutTrialDirectories,
+                "IN / OUT"
+            );
+
+
+        List<PackedRallyJson> newNearFar =
+            CollectPackedRallyJsonsEditor(
+                nearFarTrialDirectories,
+                "NEAR / FAR"
+            );
+
+
+        bool changed =
+            !ArePackedListsEquivalent(
+                packedInOutJsons,
+                newInOut
+            ) ||
+            !ArePackedListsEquivalent(
+                packedNearFarJsons,
+                newNearFar
+            );
+
+
+        packedInOutJsons =
+            newInOut;
+
+
+        packedNearFarJsons =
+            newNearFar;
+
+
+        if (
+            changed &&
+            markDirty
+        )
+        {
+            EditorUtility.SetDirty(
+                this
+            );
+        }
+
+
+        if (logSummary)
+        {
+            Debug.Log(
+                "[ExperimentalController] Packed Rally JSON Refresh\n" +
+                $"IN / OUT = {packedInOutJsons.Count}\n" +
+                $"NEAR / FAR = {packedNearFarJsons.Count}",
+                this
+            );
+        }
+    }
+
+
+    private List<PackedRallyJson> CollectPackedRallyJsonsEditor(
+        List<UnityEngine.Object> directoryObjects,
+        string stageLabel
+    )
+    {
+        List<PackedRallyJson> result =
+            new List<PackedRallyJson>();
+
+
+        if (directoryObjects == null)
+        {
+            return result;
+        }
+
+
+        HashSet<string> registeredAssetPaths =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase
+            );
+
+
+        foreach (
+            UnityEngine.Object directoryObject
+            in directoryObjects
+        )
+        {
+            if (directoryObject == null)
+            {
+                Debug.LogWarning(
+                    $"[ExperimentalController] {stageLabel}: Directory Listにnullがあります。",
+                    this
+                );
+
+                continue;
+            }
+
+
+            string rootAssetPath =
+                AssetDatabase.GetAssetPath(
+                    directoryObject
+                );
+
+
+            if (string.IsNullOrWhiteSpace(
+                rootAssetPath
+            ))
+            {
+                Debug.LogWarning(
+                    $"[ExperimentalController] {stageLabel}: Asset Pathを取得できません。 " +
+                    directoryObject.name,
+                    this
+                );
+
+                continue;
+            }
+
+
+            rootAssetPath =
+                NormalizeAssetPath(
+                    rootAssetPath
+                )
+                .TrimEnd(
+                    '/'
+                );
+
+
+            if (!AssetDatabase.IsValidFolder(
+                rootAssetPath
+            ))
+            {
+                Debug.LogWarning(
+                    $"[ExperimentalController] {stageLabel}: Folderではありません。 " +
+                    rootAssetPath,
+                    this
+                );
+
+                continue;
+            }
+
+
+            string rootDirectoryName =
+                Path.GetFileName(
+                    rootAssetPath
+                );
+
+
+            string[] guids =
+                AssetDatabase.FindAssets(
+                    string.Empty,
+                    new string[]
+                    {
+                        rootAssetPath
+                    }
+                );
+
+
+            Array.Sort(
+                guids,
+                StringComparer.Ordinal
+            );
+
+
+            foreach (
+                string guid
+                in guids
+            )
+            {
+                string jsonAssetPath =
+                    NormalizeAssetPath(
+                        AssetDatabase.GUIDToAssetPath(
+                            guid
+                        )
+                    );
+
+
+                if (!string.Equals(
+                    Path.GetExtension(
+                        jsonAssetPath
+                    ),
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase
+                ))
+                {
+                    continue;
+                }
+
+
+                string fileName =
+                    Path.GetFileName(
+                        jsonAssetPath
+                    );
+
+
+                if (IsExcludedJsonFile(
+                    fileName
+                ))
+                {
+                    continue;
+                }
+
+
+                if (!registeredAssetPaths.Add(
+                    jsonAssetPath
+                ))
+                {
+                    continue;
+                }
+
+
+                TextAsset jsonAsset =
+                    AssetDatabase.LoadAssetAtPath<TextAsset>(
+                        jsonAssetPath
+                    );
+
+
+                if (jsonAsset == null)
+                {
+                    Debug.LogWarning(
+                        $"[ExperimentalController] JSONをTextAssetとして読み込めません。 {jsonAssetPath}",
+                        this
+                    );
+
+                    continue;
+                }
+
+
+                string sourceDirectory =
+                    GetRelativeSourceDirectoryFromAssetPath(
+                        rootAssetPath,
+                        rootDirectoryName,
+                        jsonAssetPath
+                    );
+
+
+                result.Add(
+                    new PackedRallyJson
+                    {
+                        jsonAsset =
+                            jsonAsset,
+
+                        assetGuid =
+                            guid,
+
+                        rootDirectoryName =
+                            rootDirectoryName,
+
+                        sourceDirectory =
+                            sourceDirectory,
+
+                        rallyFileName =
+                            fileName,
+
+                        sourceAssetPath =
+                            jsonAssetPath
+                    }
+                );
+            }
+        }
+
+
+        result.Sort(
+            (a, b) =>
+                string.Compare(
+                    a.sourceAssetPath,
+                    b.sourceAssetPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+        );
+
+
+        return result;
+    }
+
+
+    private static bool ArePackedListsEquivalent(
+        List<PackedRallyJson> a,
+        List<PackedRallyJson> b
+    )
+    {
+        if (
+            ReferenceEquals(
+                a,
+                b
+            )
+        )
+        {
+            return true;
+        }
+
+
+        if (
+            a == null ||
+            b == null ||
+            a.Count != b.Count
+        )
+        {
+            return false;
+        }
+
+
+        for (
+            int i = 0;
+            i < a.Count;
+            i++
+        )
+        {
+            PackedRallyJson pa =
+                a[i];
+
+
+            PackedRallyJson pb =
+                b[i];
+
+
+            if (
+                pa == null ||
+                pb == null
+            )
+            {
+                if (
+                    pa != pb
+                )
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+
+            if (
+                pa.jsonAsset != pb.jsonAsset ||
+                !string.Equals(
+                    pa.assetGuid,
+                    pb.assetGuid,
+                    StringComparison.Ordinal
+                ) ||
+                !string.Equals(
+                    pa.rootDirectoryName,
+                    pb.rootDirectoryName,
+                    StringComparison.Ordinal
+                ) ||
+                !string.Equals(
+                    pa.sourceDirectory,
+                    pb.sourceDirectory,
+                    StringComparison.Ordinal
+                ) ||
+                !string.Equals(
+                    pa.rallyFileName,
+                    pb.rallyFileName,
+                    StringComparison.Ordinal
+                ) ||
+                !string.Equals(
+                    pa.sourceAssetPath,
+                    pb.sourceAssetPath,
+                    StringComparison.Ordinal
+                )
+            )
+            {
+                return false;
+            }
+        }
+
+
+        return true;
+    }
+
+
+    private static string NormalizeAssetPath(
+        string path
+    )
+    {
+        return
+            string.IsNullOrEmpty(
+                path
+            )
+                ? string.Empty
+                : path.Replace(
+                    '\\',
+                    '/'
+                );
+    }
+
+
+    private static string GetRelativeSourceDirectoryFromAssetPath(
+        string rootAssetPath,
+        string rootDirectoryName,
+        string jsonAssetPath
+    )
+    {
+        string normalizedRoot =
+            NormalizeAssetPath(
+                rootAssetPath
+            )
+            .TrimEnd(
+                '/'
+            );
+
+
+        string jsonParent =
+            NormalizeAssetPath(
+                Path.GetDirectoryName(
+                    jsonAssetPath
+                )
+            )
+            .TrimEnd(
+                '/'
+            );
+
+
+        if (string.Equals(
+            normalizedRoot,
+            jsonParent,
+            StringComparison.OrdinalIgnoreCase
+        ))
+        {
+            return
+                rootDirectoryName;
+        }
+
+
+        string prefix =
+            normalizedRoot +
+            "/";
+
+
+        if (jsonParent.StartsWith(
+            prefix,
+            StringComparison.OrdinalIgnoreCase
+        ))
+        {
+            string relativePart =
+                jsonParent.Substring(
+                    prefix.Length
+                );
+
+
+            return
+                rootDirectoryName +
+                "/" +
+                relativePart;
+        }
+
+
+        return
+            rootDirectoryName;
+    }
+
+#endif
+
+
     // ============================================================
     // Unity
     // ============================================================
@@ -694,6 +1259,14 @@ public class ExperimentalController : MonoBehaviour
 
             return;
         }
+
+
+        Debug.Log(
+            "[ExperimentalController] Packed JSON Count\n" +
+            $"IN / OUT = {(packedInOutJsons != null ? packedInOutJsons.Count : 0)}\n" +
+            $"NEAR / FAR = {(packedNearFarJsons != null ? packedNearFarJsons.Count : 0)}",
+            this
+        );
 
 
         BindButtons();
@@ -928,6 +1501,18 @@ public class ExperimentalController : MonoBehaviour
 
     private void StartExperimentSession()
     {
+#if UNITY_EDITOR
+        /*
+         * Editor Playでは、直前にJSONを追加した場合も拾えるよう
+         * Session開始時に再スキャンする。
+         */
+        RefreshPackedRallyJsonAssetsEditor(
+            false,
+            false
+        );
+#endif
+
+
         if (!ValidateExperimentSettings(
             out string validationError
         ))
@@ -943,6 +1528,18 @@ public class ExperimentalController : MonoBehaviour
         inOutTrials.Clear();
 
         nearFarTrials.Clear();
+
+
+        if (!PreparePackedRuntimeDirectory(
+            out string packedRuntimeError
+        ))
+        {
+            ShowError(
+                packedRuntimeError
+            );
+
+            return;
+        }
 
 
         currentSessionSeed =
@@ -967,7 +1564,7 @@ public class ExperimentalController : MonoBehaviour
 
         if (!BuildTrialPool(
             ExperimentStage.InOut,
-            inOutTrialDirectories,
+            packedInOutJsons,
             inOutTrials,
             out string inOutError
         ))
@@ -982,7 +1579,7 @@ public class ExperimentalController : MonoBehaviour
 
         if (!BuildTrialPool(
             ExperimentStage.NearFar,
-            nearFarTrialDirectories,
+            packedNearFarJsons,
             nearFarTrials,
             out string nearFarError
         ))
@@ -1231,7 +1828,7 @@ public class ExperimentalController : MonoBehaviour
 
     private bool BuildTrialPool(
         ExperimentStage stage,
-        List<UnityEngine.Object> directoryObjects,
+        List<PackedRallyJson> packedJsons,
         List<ExperimentTrial> destination,
         out string error
     )
@@ -1244,188 +1841,160 @@ public class ExperimentalController : MonoBehaviour
 
 
         if (
-            directoryObjects == null ||
-            directoryObjects.Count <= 0
+            packedJsons == null ||
+            packedJsons.Count <= 0
         )
         {
             error =
-                $"{GetStageName(stage)}用のDirectoryがありません。";
+                $"{GetStageName(stage)}用のJSONがBuildへ梱包されていません。\n\n" +
+                "InspectorのTrial DirectoriesにFolderを指定した状態で、" +
+                "もう一度Buildしてください。";
 
             return false;
         }
 
 
-        /*
-         * 同じJSONが重複登録されることを防ぐ。
-         *
-         * 例:
-         *
-         * Element 0 = Spike
-         * Element 1 = Spike/Front
-         *
-         * としてしまってもFrontのJSONを2回登録しない。
-         */
-        HashSet<string> registeredJsonPaths =
-            new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase
-            );
+        int usableJsonCount =
+            0;
 
 
-        foreach (
-            UnityEngine.Object directoryObject
-            in directoryObjects
+        for (
+            int packedIndex = 0;
+            packedIndex < packedJsons.Count;
+            packedIndex++
         )
         {
-            if (!TryGetDirectoryPath(
-                directoryObject,
-                out string rootDirectoryPath,
-                out string rootDirectoryName,
-                out string directoryError
+            PackedRallyJson packed =
+                packedJsons[
+                    packedIndex
+                ];
+
+
+            if (
+                packed == null ||
+                packed.jsonAsset == null
+            )
+            {
+                Debug.LogWarning(
+                    $"[ExperimentalController] Packed JSON {packedIndex} がnullです。",
+                    this
+                );
+
+                continue;
+            }
+
+
+            string fileName =
+                string.IsNullOrWhiteSpace(
+                    packed.rallyFileName
+                )
+                    ? packed.jsonAsset.name + ".json"
+                    : packed.rallyFileName;
+
+
+            if (IsExcludedJsonFile(
+                fileName
             ))
             {
+                continue;
+            }
+
+
+            string runtimeFilePath;
+
+
+            try
+            {
+                runtimeFilePath =
+                    MaterializePackedJson(
+                        stage,
+                        packed,
+                        packedIndex
+                    );
+            }
+            catch (Exception exception)
+            {
                 error =
-                    directoryError;
+                    "Buildへ梱包したRally JSONの一時展開に失敗しました。\n" +
+                    fileName +
+                    "\n\n" +
+                    exception.Message;
+
+                Debug.LogError(
+                    "[ExperimentalController] Packed JSON Materialize Error\n" +
+                    exception,
+                    this
+                );
 
                 return false;
             }
 
 
-            /*
-             * 必ずAllDirectories。
-             *
-             * Spikeだけ入れて
-             *
-             * Spike/Front
-             * Spike/Behind
-             *
-             * まで全部取得する。
-             */
-            string[] jsonPaths =
-                Directory.GetFiles(
-                    rootDirectoryPath,
-                    "*.json",
-                    SearchOption.AllDirectories
+            usableJsonCount++;
+
+
+            for (
+                int repetition = 1;
+                repetition <= Mathf.Max(
+                    1,
+                    repeatCount
                 );
-
-
-            Array.Sort(
-                jsonPaths,
-                StringComparer.OrdinalIgnoreCase
-            );
-
-
-            Debug.Log(
-                "[ExperimentalController] Directory Scan\n" +
-                $"Stage = {GetStageName(stage)}\n" +
-                $"Root = {rootDirectoryPath}\n" +
-                $"JSON Count = {jsonPaths.Length}"
-            );
-
-
-            foreach (
-                string jsonPath
-                in jsonPaths
+                repetition++
             )
             {
-                string fileName =
-                    Path.GetFileName(
-                        jsonPath
-                    );
-
-
-                if (IsExcludedJsonFile(
-                    fileName
-                ))
+                if (includeStaticCondition)
                 {
-                    continue;
+                    destination.Add(
+                        CreateTrial(
+                            stage,
+                            packed.rootDirectoryName,
+                            packed.sourceDirectory,
+                            fileName,
+                            runtimeFilePath,
+                            false,
+                            repetition
+                        )
+                    );
                 }
 
 
-                string fullPath =
-                    Path.GetFullPath(
-                        jsonPath
-                    );
-
-
-                if (!registeredJsonPaths.Add(
-                    fullPath
-                ))
+                if (includeDynamicCondition)
                 {
-                    continue;
-                }
-
-
-                /*
-                 * JSONの親Folderを取得する。
-                 *
-                 * Spike/Front/trial01.json
-                 *
-                 * なら
-                 *
-                 * Spike/Front
-                 *
-                 * を作る。
-                 */
-                string sourceDirectory =
-                    GetRelativeSourceDirectory(
-                        rootDirectoryPath,
-                        rootDirectoryName,
-                        fullPath
+                    destination.Add(
+                        CreateTrial(
+                            stage,
+                            packed.rootDirectoryName,
+                            packed.sourceDirectory,
+                            fileName,
+                            runtimeFilePath,
+                            true,
+                            repetition
+                        )
                     );
-
-
-                for (
-                    int repetition = 1;
-                    repetition <= Mathf.Max(
-                        1,
-                        repeatCount
-                    );
-                    repetition++
-                )
-                {
-                    if (includeStaticCondition)
-                    {
-                        destination.Add(
-                            CreateTrial(
-                                stage,
-                                rootDirectoryName,
-                                sourceDirectory,
-                                fileName,
-                                fullPath,
-                                false,
-                                repetition
-                            )
-                        );
-                    }
-
-
-                    if (includeDynamicCondition)
-                    {
-                        destination.Add(
-                            CreateTrial(
-                                stage,
-                                rootDirectoryName,
-                                sourceDirectory,
-                                fileName,
-                                fullPath,
-                                true,
-                                repetition
-                            )
-                        );
-                    }
                 }
             }
         }
 
 
-        if (destination.Count <= 0)
+        if (
+            usableJsonCount <= 0 ||
+            destination.Count <= 0
+        )
         {
             error =
-                $"{GetStageName(stage)}用Directory以下に" +
-                "使用可能なRally JSONがありません。";
+                $"{GetStageName(stage)}用の使用可能なRally JSONがありません。";
 
             return false;
         }
+
+
+        Debug.Log(
+            "[ExperimentalController] Packed Trial Pool\n" +
+            $"Stage = {GetStageName(stage)}\n" +
+            $"JSON Count = {usableJsonCount}\n" +
+            $"Trial Count = {destination.Count}",
+            this
+        );
 
 
         return true;
@@ -1470,253 +2039,137 @@ public class ExperimentalController : MonoBehaviour
 
 
     // ============================================================
-    // Source Directory
+    // Packed JSON Runtime Materialize
     // ============================================================
 
     /// <summary>
-    /// Root Folderから見たJSONの親Folderを取得する。
+    /// Buildへ含めたTextAsset(JSON)を、
+    /// RallyController.LoadRallyJsonFromPath()が読める実ファイルへ展開する。
     ///
-    /// 例:
-    ///
-    /// Root:
-    /// C:/Project/Assets/Experiment/Spike
-    ///
-    /// JSON:
-    /// C:/Project/Assets/Experiment/Spike/Front/test.json
-    ///
-    /// Result:
-    /// Spike/Front
-    ///
-    ///
-    /// JSONがRoot直下なら:
-    ///
-    /// Spike
-    ///
-    /// になる。
+    /// 元Assets内のFolder構成は変更しない。
     /// </summary>
-    private static string GetRelativeSourceDirectory(
-        string rootDirectoryPath,
-        string rootDirectoryName,
-        string jsonFilePath
-    )
-    {
-        string rootFullPath =
-            Path.GetFullPath(
-                rootDirectoryPath
-            )
-            .TrimEnd(
-                Path.DirectorySeparatorChar,
-                Path.AltDirectorySeparatorChar
-            );
-
-
-        string jsonParentDirectory =
-            Path.GetDirectoryName(
-                jsonFilePath
-            );
-
-
-        if (string.IsNullOrWhiteSpace(
-            jsonParentDirectory
-        ))
-        {
-            return
-                rootDirectoryName;
-        }
-
-
-        string parentFullPath =
-            Path.GetFullPath(
-                jsonParentDirectory
-            )
-            .TrimEnd(
-                Path.DirectorySeparatorChar,
-                Path.AltDirectorySeparatorChar
-            );
-
-
-        /*
-         * JSONがRoot直下。
-         */
-        if (string.Equals(
-            rootFullPath,
-            parentFullPath,
-            StringComparison.OrdinalIgnoreCase
-        ))
-        {
-            return
-                rootDirectoryName;
-        }
-
-
-        string rootPrefix =
-            rootFullPath +
-            Path.DirectorySeparatorChar;
-
-
-        /*
-         * JSONがRoot以下にある。
-         */
-        if (parentFullPath.StartsWith(
-            rootPrefix,
-            StringComparison.OrdinalIgnoreCase
-        ))
-        {
-            string relativePart =
-                parentFullPath.Substring(
-                    rootPrefix.Length
-                );
-
-
-            relativePart =
-                relativePart
-                .Replace(
-                    Path.DirectorySeparatorChar,
-                    '/'
-                )
-                .Replace(
-                    Path.AltDirectorySeparatorChar,
-                    '/'
-                );
-
-
-            return
-                rootDirectoryName +
-                "/" +
-                relativePart;
-        }
-
-
-        /*
-         * 通常ここには来ないがSafety。
-         */
-        return
-            Path.GetFileName(
-                parentFullPath
-            );
-    }
-
-
-    // ============================================================
-    // Inspector Directory -> Path
-    // ============================================================
-
-    private bool TryGetDirectoryPath(
-        UnityEngine.Object directoryObject,
-        out string absoluteDirectoryPath,
-        out string directoryName,
+    private bool PreparePackedRuntimeDirectory(
         out string error
     )
     {
-        absoluteDirectoryPath =
-            string.Empty;
-
-
-        directoryName =
-            string.Empty;
-
-
         error =
             string.Empty;
 
 
-        if (directoryObject == null)
+        try
         {
-            error =
-                "Directory Listにnullがあります。";
-
-            return false;
-        }
+            string runtimeRoot =
+                GetPackedRuntimeRootDirectory();
 
 
-#if UNITY_EDITOR
+            if (Directory.Exists(
+                runtimeRoot
+            ))
+            {
+                Directory.Delete(
+                    runtimeRoot,
+                    true
+                );
+            }
 
-        string assetPath =
-            AssetDatabase.GetAssetPath(
-                directoryObject
+
+            Directory.CreateDirectory(
+                runtimeRoot
             );
 
 
-        if (string.IsNullOrWhiteSpace(
-            assetPath
-        ))
+            return true;
+        }
+        catch (Exception exception)
         {
             error =
-                "Asset Pathを取得できません。\n" +
-                directoryObject.name;
-
-            return false;
-        }
+                "実験用JSONのRuntime展開Folderを準備できませんでした。\n\n" +
+                exception.Message;
 
 
-        if (!AssetDatabase.IsValidFolder(
-            assetPath
-        ))
-        {
-            error =
-                "Directory欄にはFolderを入れてください。\n" +
-                $"現在: {assetPath}";
-
-            return false;
-        }
-
-
-        /*
-         * Application.dataPath
-         *
-         * C:/Project/Assets
-         *
-         * ProjectRoot
-         *
-         * C:/Project
-         */
-        string projectRoot =
-            Path.GetFullPath(
-                Path.Combine(
-                    Application.dataPath,
-                    ".."
-                )
+            Debug.LogError(
+                "[ExperimentalController] Runtime Packed Directory Error\n" +
+                exception,
+                this
             );
 
 
-        absoluteDirectoryPath =
-            Path.GetFullPath(
-                Path.Combine(
-                    projectRoot,
-                    assetPath
-                )
-            );
-
-
-        directoryName =
-            Path.GetFileName(
-                absoluteDirectoryPath
-            );
-
-
-        if (!Directory.Exists(
-            absoluteDirectoryPath
-        ))
-        {
-            error =
-                "Directoryが存在しません。\n" +
-                absoluteDirectoryPath;
-
             return false;
         }
+    }
 
 
-        return true;
+    private string MaterializePackedJson(
+        ExperimentStage stage,
+        PackedRallyJson packed,
+        int packedIndex
+    )
+    {
+        string stageDirectoryName =
+            stage ==
+            ExperimentStage.InOut
+                ? "InOut"
+                : "NearFar";
 
-#else
 
-        error =
-            "Folder Drag & Drop方式はUnity Editor用です。\n" +
-            "Build版では別のFolder読込方式が必要です。";
+        string stableKey =
+            !string.IsNullOrWhiteSpace(
+                packed.assetGuid
+            )
+                ? packed.assetGuid
+                : "item_" +
+                  packedIndex.ToString(
+                      "D4",
+                      CultureInfo.InvariantCulture
+                  );
 
-        return false;
 
-#endif
+        string directory =
+            Path.Combine(
+                GetPackedRuntimeRootDirectory(),
+                stageDirectoryName,
+                stableKey
+            );
+
+
+        Directory.CreateDirectory(
+            directory
+        );
+
+
+        string fileName =
+            string.IsNullOrWhiteSpace(
+                packed.rallyFileName
+            )
+                ? packed.jsonAsset.name + ".json"
+                : packed.rallyFileName;
+
+
+        string fullPath =
+            Path.Combine(
+                directory,
+                fileName
+            );
+
+
+        File.WriteAllBytes(
+            fullPath,
+            packed.jsonAsset.bytes
+        );
+
+
+        return
+            fullPath;
+    }
+
+
+    private static string GetPackedRuntimeRootDirectory()
+    {
+        return
+            Path.Combine(
+                Application.persistentDataPath,
+                "ExperimentPackedRallies"
+            );
     }
 
 
@@ -2280,19 +2733,49 @@ public class ExperimentalController : MonoBehaviour
 
     private void ReadResponseInput()
     {
-        bool leftPressed =
+        if (
+            currentStage ==
+            ExperimentStage.InOut
+        )
+        {
+            ReadInOutResponseInput();
+
+            return;
+        }
+
+
+        if (
+            currentStage ==
+            ExperimentStage.NearFar
+        )
+        {
+            ReadNearFarResponseInput();
+        }
+    }
+
+
+    /// <summary>
+    /// IN / OUT
+    ///
+    /// Gamepad:
+    /// ○位置 / buttonEast  = IN
+    /// ×位置 / buttonSouth = OUT
+    ///
+    /// Keyboard:
+    /// F = IN
+    /// J = OUT
+    /// </summary>
+    private void ReadInOutResponseInput()
+    {
+        bool inPressed =
             false;
 
 
-        bool rightPressed =
+        bool outPressed =
             false;
 
 
 #if ENABLE_INPUT_SYSTEM
-
-        // ========================================================
-        // New Input System
-        // ========================================================
 
         if (enableKeyboardResponse)
         {
@@ -2302,13 +2785,11 @@ public class ExperimentalController : MonoBehaviour
 
             if (keyboard != null)
             {
-                leftPressed =
-                    keyboard.leftArrowKey.wasPressedThisFrame ||
+                inPressed =
                     keyboard.fKey.wasPressedThisFrame;
 
 
-                rightPressed =
-                    keyboard.rightArrowKey.wasPressedThisFrame ||
+                outPressed =
                     keyboard.jKey.wasPressedThisFrame;
             }
         }
@@ -2322,50 +2803,34 @@ public class ExperimentalController : MonoBehaviour
 
             if (gamepad != null)
             {
-                leftPressed =
-                    leftPressed ||
-
-                    gamepad.dpad.left.wasPressedThisFrame ||
-
-                    gamepad.leftShoulder.wasPressedThisFrame ||
-
-                    gamepad.buttonWest.wasPressedThisFrame;
-
-
-                rightPressed =
-                    rightPressed ||
-
-                    gamepad.dpad.right.wasPressedThisFrame ||
-
-                    gamepad.rightShoulder.wasPressedThisFrame ||
-
+                /*
+                 * PS系の○位置 / Xbox系のB位置。
+                 */
+                inPressed =
+                    inPressed ||
                     gamepad.buttonEast.wasPressedThisFrame;
+
+
+                /*
+                 * PS系の×位置 / Xbox系のA位置。
+                 */
+                outPressed =
+                    outPressed ||
+                    gamepad.buttonSouth.wasPressedThisFrame;
             }
         }
 
 #else
 
-        // ========================================================
-        // Legacy Input
-        // ========================================================
-
         if (enableKeyboardResponse)
         {
-            leftPressed =
-                Input.GetKeyDown(
-                    KeyCode.LeftArrow
-                ) ||
-
+            inPressed =
                 Input.GetKeyDown(
                     KeyCode.F
                 );
 
 
-            rightPressed =
-                Input.GetKeyDown(
-                    KeyCode.RightArrow
-                ) ||
-
+            outPressed =
                 Input.GetKeyDown(
                     KeyCode.J
                 );
@@ -2374,47 +2839,42 @@ public class ExperimentalController : MonoBehaviour
 
         if (enableGamepadResponse)
         {
-            leftPressed =
-                leftPressed ||
-
+            /*
+             * 一般的なXbox互換配置。
+             * Button1 = B位置
+             * Button0 = A位置
+             */
+            inPressed =
+                inPressed ||
                 Input.GetKeyDown(
-                    KeyCode.JoystickButton2
-                ) ||
-
-                Input.GetKeyDown(
-                    KeyCode.JoystickButton4
+                    KeyCode.JoystickButton1
                 );
 
 
-            rightPressed =
-                rightPressed ||
-
+            outPressed =
+                outPressed ||
                 Input.GetKeyDown(
-                    KeyCode.JoystickButton1
-                ) ||
-
-                Input.GetKeyDown(
-                    KeyCode.JoystickButton5
+                    KeyCode.JoystickButton0
                 );
         }
 
 #endif
 
 
-        /*
-         * 同一Frameで左右両方押された場合は無視。
-         */
         if (
-            leftPressed &&
-            rightPressed
+            inPressed &&
+            outPressed
         )
         {
             return;
         }
 
 
-        if (leftPressed)
+        if (inPressed)
         {
+            /*
+             * 既存CSV互換のため内部的にはLeft = In。
+             */
             SubmitResponse(
                 ResponseSide.Left
             );
@@ -2423,8 +2883,130 @@ public class ExperimentalController : MonoBehaviour
         }
 
 
-        if (rightPressed)
+        if (outPressed)
         {
+            /*
+             * 既存CSV互換のため内部的にはRight = Out。
+             */
+            SubmitResponse(
+                ResponseSide.Right
+            );
+        }
+    }
+
+
+    /// <summary>
+    /// NEAR / FAR
+    ///
+    /// Gamepad:
+    /// D-Pad Up   = Far / 奥
+    /// D-Pad Down = Near / 手前
+    ///
+    /// Keyboard:
+    /// ↑ = Far / 奥
+    /// ↓ = Near / 手前
+    /// </summary>
+    private void ReadNearFarResponseInput()
+    {
+        bool farPressed =
+            false;
+
+
+        bool nearPressed =
+            false;
+
+
+#if ENABLE_INPUT_SYSTEM
+
+        if (enableKeyboardResponse)
+        {
+            Keyboard keyboard =
+                Keyboard.current;
+
+
+            if (keyboard != null)
+            {
+                farPressed =
+                    keyboard.upArrowKey.wasPressedThisFrame;
+
+
+                nearPressed =
+                    keyboard.downArrowKey.wasPressedThisFrame;
+            }
+        }
+
+
+        if (enableGamepadResponse)
+        {
+            Gamepad gamepad =
+                Gamepad.current;
+
+
+            if (gamepad != null)
+            {
+                farPressed =
+                    farPressed ||
+                    gamepad.dpad.up.wasPressedThisFrame;
+
+
+                nearPressed =
+                    nearPressed ||
+                    gamepad.dpad.down.wasPressedThisFrame;
+            }
+        }
+
+#else
+
+        if (enableKeyboardResponse)
+        {
+            farPressed =
+                Input.GetKeyDown(
+                    KeyCode.UpArrow
+                );
+
+
+            nearPressed =
+                Input.GetKeyDown(
+                    KeyCode.DownArrow
+                );
+        }
+
+
+        /*
+         * Legacy Input SystemのD-PadはControllerごとにAxis差が大きいため、
+         * Gamepadの十字キー回答はNew Input Systemを推奨。
+         */
+
+#endif
+
+
+        if (
+            farPressed &&
+            nearPressed
+        )
+        {
+            return;
+        }
+
+
+        if (nearPressed)
+        {
+            /*
+             * 既存CSV互換のため内部的にはLeft = Near。
+             */
+            SubmitResponse(
+                ResponseSide.Left
+            );
+
+            return;
+        }
+
+
+        if (farPressed)
+        {
+            /*
+             * 既存CSV互換のため内部的にはRight = Far。
+             */
             SubmitResponse(
                 ResponseSide.Right
             );
@@ -3076,9 +3658,9 @@ public class ExperimentalController : MonoBehaviour
                     text +=
                         "\n<b>回答してください</b>\n\n" +
 
-                        $"←  {inOutLeftResponseLabel}" +
+                        $"○ / B位置 = {inOutLeftResponseLabel}\n" +
 
-                        $"          {inOutRightResponseLabel}  →";
+                        $"× / A位置 = {inOutRightResponseLabel}";
 
                     break;
 
@@ -3170,9 +3752,9 @@ public class ExperimentalController : MonoBehaviour
                     text +=
                         "\n<b>回答してください</b>\n\n" +
 
-                        $"←  {nearFarLeftResponseLabel}" +
+                        $"↑ = {nearFarRightResponseLabel} / 奥\n" +
 
-                        $"          {nearFarRightResponseLabel}  →";
+                        $"↓ = {nearFarLeftResponseLabel} / 手前";
 
                     break;
 
@@ -3591,24 +4173,28 @@ public class ExperimentalController : MonoBehaviour
 
 
         if (
-            inOutTrialDirectories == null ||
-            inOutTrialDirectories.Count <= 0
+            packedInOutJsons == null ||
+            packedInOutJsons.Count <= 0
         )
         {
             error =
-                "In / Out Trial Directoriesが空です。";
+                "In / Out用JSONが見つかりません。\n\n" +
+                "InspectorのIn / Out Trial DirectoriesにFolderを指定してください。\n" +
+                "Build版の場合は、その状態でもう一度Buildしてください。";
 
             return false;
         }
 
 
         if (
-            nearFarTrialDirectories == null ||
-            nearFarTrialDirectories.Count <= 0
+            packedNearFarJsons == null ||
+            packedNearFarJsons.Count <= 0
         )
         {
             error =
-                "Near / Far Trial Directoriesが空です。";
+                "Near / Far用JSONが見つかりません。\n\n" +
+                "InspectorのNear / Far Trial DirectoriesにFolderを指定してください。\n" +
+                "Build版の場合は、その状態でもう一度Buildしてください。";
 
             return false;
         }
@@ -3840,3 +4426,65 @@ public class ExperimentalController : MonoBehaviour
         }
     }
 }
+
+
+#if UNITY_EDITOR
+
+/// <summary>
+/// Build対象Sceneが処理される直前に、
+/// Inspector指定Folder以下のJSONをExperimentalControllerへ自動梱包する。
+///
+/// 元SceneのFolder構成やAssets配置は変更しない。
+/// StreamingAssetsへの手動移動も不要。
+/// </summary>
+public class ExperimentalControllerBuildProcessor :
+    IProcessSceneWithReport
+{
+    public int callbackOrder =>
+        0;
+
+
+    public void OnProcessScene(
+        Scene scene,
+        BuildReport report
+    )
+    {
+        if (!scene.IsValid())
+        {
+            return;
+        }
+
+
+        GameObject[] rootObjects =
+            scene.GetRootGameObjects();
+
+
+        foreach (
+            GameObject rootObject
+            in rootObjects
+        )
+        {
+            ExperimentalController[] controllers =
+                rootObject.GetComponentsInChildren<ExperimentalController>(
+                    true
+                );
+
+
+            foreach (
+                ExperimentalController controller
+                in controllers
+            )
+            {
+                if (controller == null)
+                {
+                    continue;
+                }
+
+
+                controller.RefreshPackedRallyJsonAssetsForBuild();
+            }
+        }
+    }
+}
+
+#endif
