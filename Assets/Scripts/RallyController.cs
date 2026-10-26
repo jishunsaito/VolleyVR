@@ -11,7 +11,7 @@ public class RallyController : MonoBehaviour
     [Serializable]
     public class RallySettingsData
     {
-        public int version = 6;
+        public int version = 7;
         public int startPhaseIndex;
         public int endPhaseIndex;
         public int courtSideIndex;
@@ -62,6 +62,10 @@ public class RallyController : MonoBehaviour
         public float tossHeight;
         public float serveHitHeight;
         public float tossForwardDistance;
+
+        // Version 7: サーブ前トスの回転 [rpm]
+        public float serveTossSpinRpm;
+
         public float serveSpeedKmh;
         public float spikeServeLaunchAngle;
 
@@ -234,6 +238,13 @@ public class RallyController : MonoBehaviour
     [SerializeField] private float serveHitHeight = 3.0f;
     [SerializeField] private float tossForwardDistance = 1.0f;
 
+    [Tooltip(
+        "サーブ前トスの回転 [rpm]。\n" +
+        "正値 = トス進行方向に対するトップスピン。\n" +
+        "UIには出さず、Inspector / JSONで管理する。"
+    )]
+    [SerializeField] private float serveTossSpinRpm = -120.0f;
+
     [Header("Spike Serve")]
     [SerializeField] private float serveSpeedKmh = 130.0f;
     [SerializeField] private float spikeServeLaunchAngle = 2.0f;
@@ -322,6 +333,7 @@ public class RallyController : MonoBehaviour
     public float ServeTossHeight => tossHeight;
     public float ServeHitHeight => serveHitHeight;
     public float ServeTossForwardDistance => tossForwardDistance;
+    public float ServeTossSpinRpm => serveTossSpinRpm;
     public float ServeSpeedKmh => serveSpeedKmh;
     public float SpikeServeLaunchAngle => spikeServeLaunchAngle;
     public float ServeFadeDelay => serveFadeDelay;
@@ -733,7 +745,8 @@ public class RallyController : MonoBehaviour
             tossHeight,
             serveHitHeight,
             tossForwardDistance,
-            tossDirection);
+            tossDirection,
+            serveTossSpinRpm);
     }
 
     private void StartReceiveSequence()
@@ -977,7 +990,7 @@ public class RallyController : MonoBehaviour
 
         return new RallySettingsData
         {
-            version = 6,
+            version = 7,
 
             startPhaseIndex = (int)startPhase,
             endPhaseIndex = (int)endPhase,
@@ -1037,6 +1050,7 @@ public class RallyController : MonoBehaviour
             tossHeight = tossHeight,
             serveHitHeight = serveHitHeight,
             tossForwardDistance = tossForwardDistance,
+            serveTossSpinRpm = serveTossSpinRpm,
             serveSpeedKmh = serveSpeedKmh,
             spikeServeLaunchAngle = spikeServeLaunchAngle,
 
@@ -1180,6 +1194,16 @@ public class RallyController : MonoBehaviour
 
         tossForwardDistance =
             Mathf.Max(0.0f, data.tossForwardDistance);
+
+        /*
+         * Version 7で追加。
+         * 既存のVersion 6以前のJSONにも軽い回転を与えるため、
+         * 未保存の場合は60 rpmを使用する。
+         */
+        serveTossSpinRpm =
+            data.version >= 7
+                ? data.serveTossSpinRpm
+                : -240.0f;
 
         serveSpeedKmh = Mathf.Max(0.0f, data.serveSpeedKmh);
         spikeServeLaunchAngle = data.spikeServeLaunchAngle;
@@ -1830,6 +1854,11 @@ public class RallyController : MonoBehaviour
     public void SetTossForwardDistance(float distance)
     {
         tossForwardDistance = Mathf.Max(0.0f, distance);
+    }
+
+    public void SetServeTossSpinRpm(float rpm)
+    {
+        serveTossSpinRpm = rpm;
     }
 
     public void SetReceiveApexHeight(float height)

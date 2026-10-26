@@ -762,11 +762,39 @@ public class VolleyballBallPhysics : MonoBehaviour
     // Serve Toss
     // ============================================================
 
+    /// <summary>
+    /// 旧呼び出し互換。
+    /// サーブトス回転を指定しない場合は無回転。
+    /// </summary>
     public void TossUp(
         float tossHeight,
         float serveHitHeight,
         float tossForwardDistance,
         Vector3 forwardDirection
+    )
+    {
+        TossUp(
+            tossHeight,
+            serveHitHeight,
+            tossForwardDistance,
+            forwardDirection,
+            0.0f
+        );
+    }
+
+
+    /// <summary>
+    /// サーブ前トス。
+    /// tossSpinRpm > 0 でトス進行方向に対するトップスピン、
+    /// tossSpinRpm < 0 で逆方向の回転を与える。
+    /// 軌道計算そのものは従来と同じで、回転は見た目の回転として使用する。
+    /// </summary>
+    public void TossUp(
+        float tossHeight,
+        float serveHitHeight,
+        float tossForwardDistance,
+        Vector3 forwardDirection,
+        float tossSpinRpm
     )
     {
         if (
@@ -914,8 +942,15 @@ public class VolleyballBallPhysics : MonoBehaviour
         rb.linearVelocity =
             tossVelocity;
 
-        rb.angularVelocity =
-            Vector3.zero;
+        /*
+         * サーブトス中の軽い回転。
+         * 軌道へMagnus力は加えていないため、従来のトス軌道は変わらない。
+         * SpikeServe()開始時に既存のサーブ回転へ上書きされる。
+         */
+        ApplySpinForVelocity(
+            forwardDirection,
+            tossSpinRpm
+        );
 
         apexReached =
             false;
@@ -934,7 +969,8 @@ public class VolleyballBallPhysics : MonoBehaviour
             $"Start = {startPosition}\n" +
             $"Apex Y = {calculatedTossApexY:F3}\n" +
             $"Hit Y = {serveHitHeight:F3}\n" +
-            $"Velocity = {tossVelocity}"
+            $"Velocity = {tossVelocity}\n" +
+            $"Spin = {tossSpinRpm:F1} rpm"
         );
     }
 

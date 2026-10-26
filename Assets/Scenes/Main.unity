@@ -20235,6 +20235,7 @@ MonoBehaviour:
   tossHeight: 5
   serveHitHeight: 3
   tossForwardDistance: 1.8
+  serveTossSpinRpm: -200
   serveSpeedKmh: 130
   spikeServeLaunchAngle: 15
   dhitController: {fileID: 2042872039}
