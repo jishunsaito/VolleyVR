@@ -48726,6 +48726,7 @@ MonoBehaviour:
   inOutTrialDirectories:
   - {fileID: 102900000, guid: 1e25ee9df65f26b418b413c9167054f9, type: 3}
   - {fileID: 102900000, guid: 6ce2e87ba2310a24a8ee76bbc26fc338, type: 3}
+  - {fileID: 102900000, guid: 12efb2e2ec437124f87f10682de13e94, type: 3}
   nearFarTrialDirectories:
   - {fileID: 102900000, guid: 1a203e1a597577a4b938a9110042ba31, type: 3}
   packedInOutJsons:
@@ -48759,6 +48760,66 @@ MonoBehaviour:
     sourceDirectory: Block/Behind
     rallyFileName: LeftSpikeBlock_OUT_R-5.json
     sourceAssetPath: Assets/Experiment/Rallies/Block/Behind/LeftSpikeBlock_OUT_R-5.json
+  - jsonAsset: {fileID: 4900000, guid: 913dc9679af17fd4ba22b4d3abaf08d1, type: 3}
+    assetGuid: 913dc9679af17fd4ba22b4d3abaf08d1
+    rootDirectoryName: Block
+    sourceDirectory: Block/Behind
+    rallyFileName: RightSpikeBlock_IN_R-1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Behind/RightSpikeBlock_IN_R-1.json
+  - jsonAsset: {fileID: 4900000, guid: 82303d794dcbf5049be2853748c82be0, type: 3}
+    assetGuid: 82303d794dcbf5049be2853748c82be0
+    rootDirectoryName: Block
+    sourceDirectory: Block/Behind
+    rallyFileName: RightSpikeBlock_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Behind/RightSpikeBlock_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: 0ee8e198b631dc44782f26f96d23d503, type: 3}
+    assetGuid: 0ee8e198b631dc44782f26f96d23d503
+    rootDirectoryName: Block
+    sourceDirectory: Block/Behind
+    rallyFileName: RightSpikeBlock_OUT_R1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Behind/RightSpikeBlock_OUT_R1.json
+  - jsonAsset: {fileID: 4900000, guid: 80d6d9f1efc5da04c9a8bf27e76b916f, type: 3}
+    assetGuid: 80d6d9f1efc5da04c9a8bf27e76b916f
+    rootDirectoryName: Block
+    sourceDirectory: Block/Behind
+    rallyFileName: RightSpikeBlock_OUT_R2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Behind/RightSpikeBlock_OUT_R2.json
+  - jsonAsset: {fileID: 4900000, guid: 9b900d9e8aaa6ec4da498d2263a7d783, type: 3}
+    assetGuid: 9b900d9e8aaa6ec4da498d2263a7d783
+    rootDirectoryName: Block
+    sourceDirectory: Block/Behind
+    rallyFileName: RightSpikeBlock_OUT_R3.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Behind/RightSpikeBlock_OUT_R3.json
+  - jsonAsset: {fileID: 4900000, guid: d63b7fb74930f3846b27906fe6a829b2, type: 3}
+    assetGuid: d63b7fb74930f3846b27906fe6a829b2
+    rootDirectoryName: Block
+    sourceDirectory: Block/Front
+    rallyFileName: LeftSpikeBlock_IN_R-2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Front/LeftSpikeBlock_IN_R-2.json
+  - jsonAsset: {fileID: 4900000, guid: 0ffcd034c4cddc74b94cd4f0364ae662, type: 3}
+    assetGuid: 0ffcd034c4cddc74b94cd4f0364ae662
+    rootDirectoryName: Block
+    sourceDirectory: Block/Front
+    rallyFileName: LeftSpikeBlock_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Front/LeftSpikeBlock_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: 221ab530fa5f60441a509606677bd62e, type: 3}
+    assetGuid: 221ab530fa5f60441a509606677bd62e
+    rootDirectoryName: Block
+    sourceDirectory: Block/Front
+    rallyFileName: LeftSpikeBlock_OUT_R-3.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Front/LeftSpikeBlock_OUT_R-3.json
+  - jsonAsset: {fileID: 4900000, guid: bdb6d6e56ab45f543aad9da1f131ea83, type: 3}
+    assetGuid: bdb6d6e56ab45f543aad9da1f131ea83
+    rootDirectoryName: Block
+    sourceDirectory: Block/Front
+    rallyFileName: LeftSpikeBlock_OUT_R-4.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Front/LeftSpikeBlock_OUT_R-4.json
+  - jsonAsset: {fileID: 4900000, guid: 24a10b1b27a7bc641b1f0010bdafe871, type: 3}
+    assetGuid: 24a10b1b27a7bc641b1f0010bdafe871
+    rootDirectoryName: Block
+    sourceDirectory: Block/Front
+    rallyFileName: LeftSpikeBlock_OUT_R-5.json
+    sourceAssetPath: Assets/Experiment/Rallies/Block/Front/LeftSpikeBlock_OUT_R-5.json
   - jsonAsset: {fileID: 4900000, guid: 1a70016d7b7092740b5db1b83afe3be0, type: 3}
     assetGuid: 1a70016d7b7092740b5db1b83afe3be0
     rootDirectoryName: Block
@@ -48789,6 +48850,126 @@ MonoBehaviour:
     sourceDirectory: Block/Front
     rallyFileName: RightSpikeBlock_OUT_R3.json
     sourceAssetPath: Assets/Experiment/Rallies/Block/Front/RightSpikeBlock_OUT_R3.json
+  - jsonAsset: {fileID: 4900000, guid: 494eda05f11d88f4c89ffc2ed31e576b, type: 3}
+    assetGuid: 494eda05f11d88f4c89ffc2ed31e576b
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: LeftDig_IN_R-1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/LeftDig_IN_R-1.json
+  - jsonAsset: {fileID: 4900000, guid: a68aaf95698d4a84699e6f8b91895f05, type: 3}
+    assetGuid: a68aaf95698d4a84699e6f8b91895f05
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: LeftDig_IN_R-2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/LeftDig_IN_R-2.json
+  - jsonAsset: {fileID: 4900000, guid: de6dd08970097104db2cc37b258c328c, type: 3}
+    assetGuid: de6dd08970097104db2cc37b258c328c
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: LeftDig_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/LeftDig_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: ec037725ca36a3e43a7f44f0c4655ca8, type: 3}
+    assetGuid: ec037725ca36a3e43a7f44f0c4655ca8
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: LeftDig_OUT_R+1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/LeftDig_OUT_R+1.json
+  - jsonAsset: {fileID: 4900000, guid: 503766ce799bbb248914a07b72eb79c9, type: 3}
+    assetGuid: 503766ce799bbb248914a07b72eb79c9
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: LeftDig_OUT_R+2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/LeftDig_OUT_R+2.json
+  - jsonAsset: {fileID: 4900000, guid: 6a5cbf4877941784988d4a1cdf74dabd, type: 3}
+    assetGuid: 6a5cbf4877941784988d4a1cdf74dabd
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: RightDig_IN_R+1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/RightDig_IN_R+1.json
+  - jsonAsset: {fileID: 4900000, guid: e17850ec646b2354a9f65375537be154, type: 3}
+    assetGuid: e17850ec646b2354a9f65375537be154
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: RightDig_IN_R+2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/RightDig_IN_R+2.json
+  - jsonAsset: {fileID: 4900000, guid: a9c4b0d488e721746bb9d18de7275a54, type: 3}
+    assetGuid: a9c4b0d488e721746bb9d18de7275a54
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: RightDig_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/RightDig_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: 1c7a43a02e2b0b644a673102c22b3751, type: 3}
+    assetGuid: 1c7a43a02e2b0b644a673102c22b3751
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: RightDig_OUT_R-1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/RightDig_OUT_R-1.json
+  - jsonAsset: {fileID: 4900000, guid: a870cbaf2be09fc4686da67a168a778c, type: 3}
+    assetGuid: a870cbaf2be09fc4686da67a168a778c
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Behind
+    rallyFileName: RightDig_OUT_R-2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Behind/RightDig_OUT_R-2.json
+  - jsonAsset: {fileID: 4900000, guid: ca841e8a261e9684a9dda39b985715fc, type: 3}
+    assetGuid: ca841e8a261e9684a9dda39b985715fc
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: LeftDig_IN_R-1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/LeftDig_IN_R-1.json
+  - jsonAsset: {fileID: 4900000, guid: f013c11f13b5aab4d9678ad3f3362e2d, type: 3}
+    assetGuid: f013c11f13b5aab4d9678ad3f3362e2d
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: LeftDig_IN_R-2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/LeftDig_IN_R-2.json
+  - jsonAsset: {fileID: 4900000, guid: 80c6635309b9cea4a958e2fc6993572c, type: 3}
+    assetGuid: 80c6635309b9cea4a958e2fc6993572c
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: LeftDig_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/LeftDig_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: 0c4d93ecace503a42aa2d0c686866b77, type: 3}
+    assetGuid: 0c4d93ecace503a42aa2d0c686866b77
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: LeftDig_OUT_R+1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/LeftDig_OUT_R+1.json
+  - jsonAsset: {fileID: 4900000, guid: 416d729250011c243b6e3871081f56bb, type: 3}
+    assetGuid: 416d729250011c243b6e3871081f56bb
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: LeftDig_OUT_R+2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/LeftDig_OUT_R+2.json
+  - jsonAsset: {fileID: 4900000, guid: 8fca33db9f90a1b4c892d135609e904b, type: 3}
+    assetGuid: 8fca33db9f90a1b4c892d135609e904b
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: RightDig_IN_R+1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/RightDig_IN_R+1.json
+  - jsonAsset: {fileID: 4900000, guid: cacefaeaab7a3604593aff32a9e0d1d3, type: 3}
+    assetGuid: cacefaeaab7a3604593aff32a9e0d1d3
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: RightDig_IN_R+2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/RightDig_IN_R+2.json
+  - jsonAsset: {fileID: 4900000, guid: 2bd396c677ed6f146bd5b544b996ea0c, type: 3}
+    assetGuid: 2bd396c677ed6f146bd5b544b996ea0c
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: RightDig_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/RightDig_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: f414c9dad90baab4097bbf94e1bc3567, type: 3}
+    assetGuid: f414c9dad90baab4097bbf94e1bc3567
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: RightDig_OUT_R-1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/RightDig_OUT_R-1.json
+  - jsonAsset: {fileID: 4900000, guid: c70c54e04e93a79479812756e785e920, type: 3}
+    assetGuid: c70c54e04e93a79479812756e785e920
+    rootDirectoryName: Dig
+    sourceDirectory: Dig/Front
+    rallyFileName: RightDig_OUT_R-2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Dig/Front/RightDig_OUT_R-2.json
   - jsonAsset: {fileID: 4900000, guid: 648e5ce3189d8c14aba43d191264c641, type: 3}
     assetGuid: 648e5ce3189d8c14aba43d191264c641
     rootDirectoryName: Spike
@@ -48861,6 +49042,78 @@ MonoBehaviour:
     sourceDirectory: Spike/Behind
     rallyFileName: Rightspike_OUT_R+0.5.json
     sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind/Rightspike_OUT_R+0.5.json
+  - jsonAsset: {fileID: 4900000, guid: a62522357a9171c40a33c66d4ab27c7e, type: 3}
+    assetGuid: a62522357a9171c40a33c66d4ab27c7e
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Leftspike_IN_R+0.1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Leftspike_IN_R+0.1.json
+  - jsonAsset: {fileID: 4900000, guid: 67ea0e2d0f1a1aa4e81b1670d48ea59b, type: 3}
+    assetGuid: 67ea0e2d0f1a1aa4e81b1670d48ea59b
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Leftspike_IN_R+0.2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Leftspike_IN_R+0.2.json
+  - jsonAsset: {fileID: 4900000, guid: 2e94fb2ad4f5d5a448c43bbdbeaf1ef2, type: 3}
+    assetGuid: 2e94fb2ad4f5d5a448c43bbdbeaf1ef2
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Leftspike_IN_R+0.3.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Leftspike_IN_R+0.3.json
+  - jsonAsset: {fileID: 4900000, guid: 29f5602c422967e41a17523d4fcdc320, type: 3}
+    assetGuid: 29f5602c422967e41a17523d4fcdc320
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Leftspike_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Leftspike_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: 82f87c6bca21a0742aacd20e9891da41, type: 3}
+    assetGuid: 82f87c6bca21a0742aacd20e9891da41
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Leftspike_OUT_R+0.4.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Leftspike_OUT_R+0.4.json
+  - jsonAsset: {fileID: 4900000, guid: 370eeaa7db4205b4dae5c4ef88c5b61e, type: 3}
+    assetGuid: 370eeaa7db4205b4dae5c4ef88c5b61e
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Leftspike_OUT_R+0.5.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Leftspike_OUT_R+0.5.json
+  - jsonAsset: {fileID: 4900000, guid: ab97b15dc1be95a4496043c822e084cb, type: 3}
+    assetGuid: ab97b15dc1be95a4496043c822e084cb
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Rightspike_IN_R+0.1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Rightspike_IN_R+0.1.json
+  - jsonAsset: {fileID: 4900000, guid: 0eb83d65d2da7ed4cb44e11de70c8b3f, type: 3}
+    assetGuid: 0eb83d65d2da7ed4cb44e11de70c8b3f
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Rightspike_IN_R+0.2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Rightspike_IN_R+0.2.json
+  - jsonAsset: {fileID: 4900000, guid: c3787376491401c4fab06a9c300353ed, type: 3}
+    assetGuid: c3787376491401c4fab06a9c300353ed
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Rightspike_IN_R+0.3.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Rightspike_IN_R+0.3.json
+  - jsonAsset: {fileID: 4900000, guid: 83990afbd516f4b4093faf644960be8b, type: 3}
+    assetGuid: 83990afbd516f4b4093faf644960be8b
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Rightspike_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Rightspike_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: ea643516183bac04c81bf62d6a30b95c, type: 3}
+    assetGuid: ea643516183bac04c81bf62d6a30b95c
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Rightspike_OUT_R+0.4.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Rightspike_OUT_R+0.4.json
+  - jsonAsset: {fileID: 4900000, guid: 19bcfaf7d6f50da48a1cdc8b56ceb4f0, type: 3}
+    assetGuid: 19bcfaf7d6f50da48a1cdc8b56ceb4f0
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Behind_spikeFade_updated/Behind
+    rallyFileName: Rightspike_OUT_R+0.5.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Behind_spikeFade_updated/Behind/Rightspike_OUT_R+0.5.json
   - jsonAsset: {fileID: 4900000, guid: 2ba7777a574930f41a80a5bcbe912d03, type: 3}
     assetGuid: 2ba7777a574930f41a80a5bcbe912d03
     rootDirectoryName: Spike
@@ -48933,6 +49186,78 @@ MonoBehaviour:
     sourceDirectory: Spike/Front
     rallyFileName: Rightspike_OUT_R+0.5.json
     sourceAssetPath: Assets/Experiment/Rallies/Spike/Front/Rightspike_OUT_R+0.5.json
+  - jsonAsset: {fileID: 4900000, guid: e64029288cb4b3d4fb0dc877b3908614, type: 3}
+    assetGuid: e64029288cb4b3d4fb0dc877b3908614
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Leftspike_IN_R+0.1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Leftspike_IN_R+0.1.json
+  - jsonAsset: {fileID: 4900000, guid: 25f2ed6bfb35ea540ac5a402cc0bfd17, type: 3}
+    assetGuid: 25f2ed6bfb35ea540ac5a402cc0bfd17
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Leftspike_IN_R+0.2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Leftspike_IN_R+0.2.json
+  - jsonAsset: {fileID: 4900000, guid: 65b8893494a24684e84b1182636b6e53, type: 3}
+    assetGuid: 65b8893494a24684e84b1182636b6e53
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Leftspike_IN_R+0.3.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Leftspike_IN_R+0.3.json
+  - jsonAsset: {fileID: 4900000, guid: 49ca29cb183671a4a9eb5d48529e62de, type: 3}
+    assetGuid: 49ca29cb183671a4a9eb5d48529e62de
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Leftspike_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Leftspike_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: 35fe68542fe167d49867183ecd3d2ecc, type: 3}
+    assetGuid: 35fe68542fe167d49867183ecd3d2ecc
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Leftspike_OUT_R+0.4.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Leftspike_OUT_R+0.4.json
+  - jsonAsset: {fileID: 4900000, guid: 77ef91926001b434ca79523141908c4b, type: 3}
+    assetGuid: 77ef91926001b434ca79523141908c4b
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Leftspike_OUT_R+0.5.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Leftspike_OUT_R+0.5.json
+  - jsonAsset: {fileID: 4900000, guid: 66587c1fd2162d54a99e08ff2f245de4, type: 3}
+    assetGuid: 66587c1fd2162d54a99e08ff2f245de4
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Rightspike_IN_R+0.1.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Rightspike_IN_R+0.1.json
+  - jsonAsset: {fileID: 4900000, guid: 8a968e56a5012f345ba3792d79c7f748, type: 3}
+    assetGuid: 8a968e56a5012f345ba3792d79c7f748
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Rightspike_IN_R+0.2.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Rightspike_IN_R+0.2.json
+  - jsonAsset: {fileID: 4900000, guid: 54404d9cb77b8b44c99c59e782079c0b, type: 3}
+    assetGuid: 54404d9cb77b8b44c99c59e782079c0b
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Rightspike_IN_R+0.3.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Rightspike_IN_R+0.3.json
+  - jsonAsset: {fileID: 4900000, guid: 87e47041aa2945342a440c3c0d5e4986, type: 3}
+    assetGuid: 87e47041aa2945342a440c3c0d5e4986
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Rightspike_IN_R0.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Rightspike_IN_R0.json
+  - jsonAsset: {fileID: 4900000, guid: ab4acfdffe658444d980a196c0a26a56, type: 3}
+    assetGuid: ab4acfdffe658444d980a196c0a26a56
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Rightspike_OUT_R+0.4.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Rightspike_OUT_R+0.4.json
+  - jsonAsset: {fileID: 4900000, guid: d1ec5132677e14a4aa562354390170fa, type: 3}
+    assetGuid: d1ec5132677e14a4aa562354390170fa
+    rootDirectoryName: Spike
+    sourceDirectory: Spike/Front_spikeFade_updated/Front
+    rallyFileName: Rightspike_OUT_R+0.5.json
+    sourceAssetPath: Assets/Experiment/Rallies/Spike/Front_spikeFade_updated/Front/Rightspike_OUT_R+0.5.json
   packedNearFarJsons:
   - jsonAsset: {fileID: 4900000, guid: cb85ca96e43b16a448b7afa0bfde8efc, type: 3}
     assetGuid: cb85ca96e43b16a448b7afa0bfde8efc

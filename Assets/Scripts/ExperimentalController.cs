@@ -2786,11 +2786,11 @@ public class ExperimentalController : MonoBehaviour
             if (keyboard != null)
             {
                 inPressed =
-                    keyboard.fKey.wasPressedThisFrame;
+                    keyboard.yKey.wasPressedThisFrame;
 
 
                 outPressed =
-                    keyboard.jKey.wasPressedThisFrame;
+                    keyboard.nKey.wasPressedThisFrame;
             }
         }
 
